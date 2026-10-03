@@ -79,7 +79,7 @@ public class DeviceSmokeTest {
             for (android.view.accessibility.AccessibilityWindowInfo window:instrumentation.getUiAutomation().getWindows()) {
                 if (window.getType()==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
                     android.view.accessibility.AccessibilityNodeInfo node=window.getRoot();
-                    visible=node!=null && (hasText(node,"Raw") || hasText(node,"Casual") || hasText(node,"Dictate"));
+                    visible=node!=null && "com.venith.dictation".contentEquals(node.getPackageName()) && hasText(node,"Start or stop dictation recording");
                 }
             }
             assertTrue("The Venith IME must be visible",visible);

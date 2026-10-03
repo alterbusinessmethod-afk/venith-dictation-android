@@ -1,65 +1,27 @@
-# Privacy Policy
+# Venith Dictation privacy
 
-This project is an open-source Android keyboard prototype. It is designed for users who bring their own API key and run the app on their own device.
+This policy describes this fork's default build. As an Android input method, the keyboard receives editor metadata and text necessary for typing and can insert text into the active field. Microphone access is used when you start dictation. Voice is suppressed for password and non-text fields; this does not make a keyboard unable to see all other text presented by Android.
 
-This document describes the default behavior of the app in this repository. If you fork, modify, or distribute it, review and update this policy for your version.
+## Default local path
 
-## What The App Can Access
+Bundled English Zipformer is the default speech provider. Audio is recorded on the phone and decoded locally. Its model weights are included in the APK and verified before the private working copy is activated. Cleanup and transcript history start off. The recognizer is released after a dictation task, and the microphone is not an always-listening background service. Dictation is limited to 120 seconds.
 
-As an Android keyboard, the app may receive text typed through the keyboard and may insert text into the active app.
+Optional Vosk and Parakeet models require downloads from their configured public sources. These downloads reveal normal network metadata to those hosts. Their local integrity receipt detects later corruption; it is separate from the bundled Zipformer's pinned upstream hash verification.
 
-With microphone permission, the app can record audio while the microphone button is active.
+## Optional cloud paths
 
-## What Is Sent To External Services
+Enabling cloud cleanup sends recognized transcript text and your selected cleanup instructions to the selected API provider, authenticated with your own key. Anthropic Sonnet 4.6 is the default cleanup choice. The local speech path keeps audio on the phone. If you explicitly select OpenAI, xAI or Deepgram cloud speech instead, the recorded audio is sent to that provider. Network-unavailable cloud speech falls back to the bundled local provider.
 
-The app does not send typed keystrokes to a server for normal keyboard typing.
+Normal typed keystrokes are not sent to an app-owned server. This app has no app-owned backend or analytics collector. Provider handling of data and API billing is governed by your provider account and its current policy.
 
-When a cloud transcription provider is selected, such as OpenAI, Grok / xAI, or Deepgram:
+## Keys and local files
 
-- audio is recorded locally while the microphone is active,
-- after recording stops, the audio file is sent to the selected provider's transcription API,
-- the returned transcript is used inside the keyboard.
+API keys are encrypted in private preferences using AES-GCM with a device-bound Android Keystore key. The key screen blocks screenshots, autofill and saved view state. Legacy plaintext preference entries are migrated and removed only after encrypted values can be committed. A storage failure is shown; an explicit confirmed clear control allows recovery from unreadable ciphertext without clearing other settings. The app disables Android backup and cleartext HTTP traffic. No developer key is bundled.
 
-When transcript cleanup is enabled:
+Temporary recording files are held in private app cache during recognition and cleanup and removed by the app when the task finishes/cancels. Models and settings are in private app storage. User prompts, provider/model IDs and style choices remain local. Transcript history is optional; apps' no-personalized-learning flag suppresses history/learning. Raw transcript recovery is available in the current session when appropriate. Android or a process termination may leave a cache file until normal app/cache cleanup.
 
-- the transcript text is sent to the selected transform provider, such as OpenAI, Grok / xAI, or Claude / Anthropic,
-- the returned cleaned text is inserted into the active text field.
+## Context
 
-When offline Vosk or offline Parakeet transcription is selected:
+Automatic context reads the active editor's app package/input type to select AI Prompt or Email. It does not scrape the app screen, read browser URLs, use an Accessibility service or inventory every installed app. Browser use needs manual mode selection. Turn automatic context off for persistent manual control. Pending delivery is guarded by editor and cursor/selection snapshots.
 
-- the app downloads a local speech model on first use,
-- audio is recorded locally while the microphone is active,
-- transcription runs on the device after recording stops,
-- transcript cleanup may still send text to a cloud transform provider if cleanup is enabled.
-
-If a cloud transcription provider is selected but the phone has no validated internet connection, the app falls back to an installed offline model. It uses offline Parakeet first when available, then offline Vosk. In that case, the recorded audio is not sent to the cloud for transcription.
-
-## API Keys
-
-The app does not include bundled provider API keys.
-
-Users enter their own API keys in the app settings. In the current prototype, keys are stored locally in Android app preferences. This is convenient for development but is not the strongest available storage option.
-
-For a production app, use encrypted preferences or Android Keystore.
-
-## Local Data
-
-Temporary audio files are created in the app cache while processing a recording. The app attempts to delete each temporary audio file after processing.
-
-Offline speech models are stored locally in the app's private files directory.
-
-Settings such as providers, model names, selected preset, prompts, and API keys are stored locally on the device.
-
-## What This Project Does Not Do
-
-The default app does not:
-
-- include a developer-owned API key,
-- collect analytics,
-- run an app-owned backend server,
-- upload normal typed keystrokes,
-- sell user data.
-
-## Important Warning
-
-Keyboard apps are inherently sensitive software. Review the source before installing, especially if you use this project as a base for your own public app.
+The original upstream policy is retained as historical reference under docs/upstream-reference; this document describes the Venith fork.

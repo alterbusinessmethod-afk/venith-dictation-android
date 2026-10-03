@@ -135,7 +135,8 @@ final class OpenAiClient {
         // Optional reasoning/cache/verbosity hints vary by model; use the portable request.
         JSONObject body = new JSONObject()
                 .put("model", model)
-                .put("input", prompt + OUTPUT_CONTRACT + "\n\n" + input);
+                .put("instructions", prompt + OUTPUT_CONTRACT)
+                .put("input", input);
         String response = sendResponsesRequest(apiKey, body);
 
         JSONObject json = new JSONObject(response);
