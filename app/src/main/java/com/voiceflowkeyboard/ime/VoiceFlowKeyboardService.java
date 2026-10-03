@@ -59,6 +59,11 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -69,7 +74,17 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     private static final int SPACE_CURSOR_HOLD_MS = 280;
     private static final int SPACE_CURSOR_STEP_DP = 10;
     private static final Map<String, String> COMMON_TYPOS = commonTypos();
-    private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final ThreadPoolExecutor executor = new ThreadPoolExecutor(1,1,0L,TimeUnit.MILLISECONDS,
+            new ArrayBlockingQueue<>(1));
+    private long editorGeneration;
+    private CaptureSession captureSession;
+    private final ThreadLocal<CaptureSession> workerSession = new ThreadLocal<>();
+    private SafeHttp.Scope requestScope;
+    private Future<?> voiceJob;
+    private boolean destroyed;
+    private boolean deliveringVoiceResult;
+    private String pendingRawTranscript = "";
+    private String recoverableRawTranscript = "";
     /**
      * Separate from {@link #executor} on purpose. That one is a single thread
      * shared with cloud transcription, retone, transform and model downloads;
@@ -116,6 +131,12 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     private boolean spaceCursorMode;
     private boolean offlineRecordingSession;
     private String offlineRecordingProvider = Prefs.PROVIDER_OFFLINE_VOSK;
+    private final Runnable recordingLimit = () -> {
+        if(recording) {
+            if(offlineRecordingSession) stopOfflineRecordingAndTranscribe();
+            else stopCloudRecordingAndTranscribe();
+        }
+    };
     private float downX;
     private float downY;
     private float rootDownX;
@@ -160,6 +181,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     private String statusSpinnerBase = "";
     private String translationTargetLanguage = "";
     private String instructionSourceText = "";
+    private int instructionSelectionStart=-1, instructionSelectionEnd=-1;
+    private int currentSelectionStart=-1, currentSelectionEnd=-1;
     private String pendingAutoCorrectWord = "";
     private String pendingAutoCorrectReplacement = "";
     private final List<String> pendingAutoCorrectSuggestions = new ArrayList<>();
@@ -178,7 +201,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         // The framework calls this again after a configuration change, so this
         // is the one place geometry needs to be derived.
         metrics = KeyboardMetrics.from(getResources().getConfiguration());
-        selectedPreset = Prefs.activePreset(this);
+        selectedPreset = resolvedPreset();
         selectedExpression = Prefs.expressionForPreset(this, selectedPreset);
         if (!chineseAvailable() && inputMode.isChinese()) {
             // Chinese was switched off in Settings while the keyboard was away.
@@ -215,7 +238,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
 
     @Override
     public void onDestroy() {
-        stopRecorderSilently();
+        destroyed=true;
+        invalidateVoiceJobs();
         executor.shutdownNow();
         typingExecutor.shutdownNow();
         super.onDestroy();
@@ -224,7 +248,9 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     @Override
     public void onStartInput(EditorInfo attribute, boolean restarting) {
         super.onStartInput(attribute, restarting);
-        cancelRecordingIfKeyboardShouldReset();
+        currentSelectionStart=attribute==null?-1:attribute.initialSelStart;
+        currentSelectionEnd=attribute==null?-1:attribute.initialSelEnd;
+        invalidateVoiceJobs();
         settlePinyin(PinyinSession.SettleReason.EDITOR_GONE);
         clearAutoCorrection();
         clearLastAutoCorrection();
@@ -246,7 +272,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         // would put the parse in the worst possible place; onCreate is too
         // early, because there is no field yet and a password box never needs
         // it at all.
-        if (shouldTypingAssistance()) {
+        if (shouldTypingAssistance() && !isIncognitoEditor()) {
             englishEngine().prepare();
         }
         restoreKeyboardForActiveInput();
@@ -268,7 +294,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
 
     @Override
     public void onFinishInput() {
-        cancelRecordingIfKeyboardShouldReset();
+        invalidateVoiceJobs();
         // The editor is going away: drop the buffer without writing anything.
         // Committing here risks landing text in whatever field comes next.
         settlePinyin(PinyinSession.SettleReason.EDITOR_GONE);
@@ -280,7 +306,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
 
     @Override
     public void onWindowHidden() {
-        cancelRecordingIfKeyboardShouldReset();
+        invalidateVoiceJobs();
         if (!recording && !processing) {
             resetToRegularKeyboard();
         }
@@ -296,6 +322,11 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             int candidatesStart,
             int candidatesEnd
     ) {
+        currentSelectionStart=newSelStart; currentSelectionEnd=newSelEnd;
+        if (!deliveringVoiceResult && (recording || processing) && captureSession != null
+                && !captureSession.matchesSelection(newSelStart, newSelEnd)) {
+            cancelForSelectionChange();
+        }
         super.onUpdateSelection(
                 oldSelStart,
                 oldSelEnd,
@@ -568,7 +599,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             translationButton = translationButton();
             translationButton.setOnClickListener(v -> {
                 haptic(v);
-                toggleTranslationCapture();
+                guardKeyAction(this::toggleTranslationCapture);
             });
             top.addView(translationButton);
         } else {
@@ -579,7 +610,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         createButton = createButton();
         createButton.setOnClickListener(v -> {
             haptic(v);
-            toggleCreationCapture();
+            guardKeyAction(this::toggleCreationCapture);
         });
         top.addView(createButton);
 
@@ -587,7 +618,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         instructionButton = instructionButton();
         instructionButton.setOnClickListener(v -> {
             haptic(v);
-            toggleInstructionCapture();
+            guardKeyAction(this::toggleInstructionCapture);
         });
         top.addView(instructionButton);
 
@@ -595,7 +626,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         micButton = micButton();
         micButton.setOnClickListener(v -> {
             haptic(v);
-            toggleVoiceCapture();
+            guardKeyAction(this::toggleVoiceCapture);
         });
         top.addView(micButton);
 
@@ -687,6 +718,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private void showHistoryPanel() {
+        if(isIncognitoEditor() || !shouldAllowVoiceCapture()) { setStatus("History unavailable in this field"); return; }
         if (keyboardPanel == null || recording || processing) {
             return;
         }
@@ -1174,6 +1206,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private void showIdleChips() {
+        if (showRawRecoveryChip()) return;
         // Candidates outrank everything: while composing, the strip is the only
         // way to choose a character.
         if (showPinyinCandidates()) {
@@ -1189,6 +1222,26 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             return;
         }
         hideChipStrip();
+    }
+
+    private boolean showRawRecoveryChip() {
+        if (chipStrip == null || recording || processing || recoverableRawTranscript.isEmpty()
+                || isIncognitoEditor() || !shouldAllowVoiceCapture()) return false;
+        chipStrip.removeAllViews();
+        showChipStrip();
+        TextView recover = chip("Recover raw dictation", v -> {
+            if (isIncognitoEditor() || !shouldAllowVoiceCapture()) return;
+            String raw = recoverableRawTranscript;
+            recoverableRawTranscript = "";
+            String inserted = insertVoiceText(raw);
+            if (inserted.isEmpty()) recoverableRawTranscript = raw;
+            setStatus(inserted.isEmpty() ? "Could not insert raw text" : "Raw inserted by request");
+            showIdleChips();
+        });
+        recover.setTextColor(colors.onAccent);
+        recover.setBackground(keyBackground(colors.accent, true));
+        chipStrip.addView(recover);
+        return true;
     }
 
     private boolean showRetoneChip() {
@@ -1302,7 +1355,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
                 , 1f
         ));
         if (retoneMode) {
-            TextView apply = historyActionButton("Apply", v -> applyRetone(), true);
+            TextView apply = historyActionButton("Apply", v -> guardKeyAction(this::applyRetone), true);
             headerRow.addView(apply);
         }
         voiceStyleOverlay.addView(headerRow, new LinearLayout.LayoutParams(
@@ -1675,14 +1728,15 @@ public class VoiceFlowKeyboardService extends InputMethodService {
 
     private ImageButton micButton() {
         ImageButton button = new ImageButton(this);
+        button.setContentDescription("Start or stop dictation recording");
         button.setImageResource(R.drawable.ic_mic_24);
         button.setColorFilter(colors.text);
         button.setBackground(ovalBackground(colors.key, false));
         button.setScaleType(ImageButton.ScaleType.CENTER);
         button.setPadding(dp(8), dp(8), dp(8), dp(8));
-        button.setMinimumWidth(0);
-        button.setMinimumHeight(0);
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(38), dp(38));
+        button.setMinimumWidth(dp(48));
+        button.setMinimumHeight(dp(48));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(48), dp(48));
         params.setMargins(dp(2), dp(2), dp(2), dp(2));
         button.setLayoutParams(params);
         return button;
@@ -1695,10 +1749,10 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         button.setBackground(ovalBackground(colors.key, false));
         button.setScaleType(ImageButton.ScaleType.CENTER);
         button.setPadding(dp(8), dp(8), dp(8), dp(8));
-        button.setMinimumWidth(0);
-        button.setMinimumHeight(0);
+        button.setMinimumWidth(dp(48));
+        button.setMinimumHeight(dp(48));
         button.setContentDescription("Voice instruction");
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(38), dp(38));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(48), dp(48));
         params.setMargins(dp(2), dp(2), dp(2), dp(2));
         button.setLayoutParams(params);
         return button;
@@ -1711,10 +1765,10 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         button.setBackground(ovalBackground(colors.key, false));
         button.setScaleType(ImageButton.ScaleType.CENTER);
         button.setPadding(dp(8), dp(8), dp(8), dp(8));
-        button.setMinimumWidth(0);
-        button.setMinimumHeight(0);
+        button.setMinimumWidth(dp(48));
+        button.setMinimumHeight(dp(48));
         button.setContentDescription("Create and append text");
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(38), dp(38));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(48), dp(48));
         params.setMargins(dp(2), dp(2), dp(2), dp(2));
         button.setLayoutParams(params);
         return button;
@@ -1727,10 +1781,10 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         button.setBackground(ovalBackground(colors.key, false));
         button.setScaleType(ImageButton.ScaleType.CENTER);
         button.setPadding(dp(8), dp(8), dp(8), dp(8));
-        button.setMinimumWidth(0);
-        button.setMinimumHeight(0);
+        button.setMinimumWidth(dp(48));
+        button.setMinimumHeight(dp(48));
         button.setContentDescription("Translate voice to " + Prefs.translationTargetLanguage(this));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(38), dp(38));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(48), dp(48));
         params.setMargins(dp(2), dp(2), dp(2), dp(2));
         button.setLayoutParams(params);
         return button;
@@ -2076,6 +2130,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private String insertVoiceText(String text) {
+        if(!shouldAllowVoiceCapture()) return "";
         InputConnection connection = getCurrentInputConnection();
         if (connection == null) {
             return "";
@@ -2133,7 +2188,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
                 || insertedText == null
                 || insertedText.isEmpty()
                 || historyId == null
-                || historyId.isEmpty()) {
+                ) {
             clearLastVoiceInsertion();
             return;
         }
@@ -2169,8 +2224,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         if (processing || recording || lastVoiceRawTranscript.isEmpty() || lastVoiceHistoryId.isEmpty()) {
             return;
         }
-        if (!hasNetworkConnectivity()) {
-            setStatus("Retone requires a connection");
+        if (isIncognitoEditor() || !Prefs.enableTransform(this) || !hasNetworkConnectivity()) {
+            setStatus("Enable cleanup and connect to retone");
             return;
         }
         String provider = Prefs.transformProvider(this);
@@ -2229,8 +2284,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         if (!retoneMode || processing) {
             return;
         }
-        if (!hasNetworkConnectivity()) {
-            setStatus("Retone requires a connection");
+        if (isIncognitoEditor() || !Prefs.enableTransform(this) || !hasNetworkConnectivity()) {
+            setStatus("Enable cleanup and connect to retone");
             return;
         }
         final String raw = lastVoiceRawTranscript;
@@ -2250,7 +2305,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         updateRecordingControls();
         setKeyboardLocked(true);
         startStatusSpinner("Retoning: " + labelForPreset(preset) + " - " + Prefs.expressionLabel(expression));
-        executor.execute(() -> {
+        submitVoiceWork(() -> {
             try {
                 String result;
                 if (VoiceHistoryItem.OPERATION_TRANSLATION.equals(operation)) {
@@ -2263,8 +2318,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
                 if (result == null || result.trim().isEmpty()) {
                     throw new IllegalStateException("Retone returned no text.");
                 }
-                mainHandler.post(() -> {
-                    Prefs.updateTranscriptHistory(this, historyId, raw, result, preset, expression);
+                postJob(() -> {
+                    updateCaptureHistory( historyId, raw, result, preset, expression);
                     String replacement = replaceLastVoiceInsertion(oldInserted, result);
                     if (!replacement.isEmpty()) {
                         rememberLastVoiceInsertion(
@@ -2284,12 +2339,13 @@ public class VoiceFlowKeyboardService extends InputMethodService {
                     }
                 });
             } catch (Exception e) {
-                mainHandler.post(() -> finishProcessingState("Retone failed: " + concise(e)));
+                postJob(() -> finishProcessingState("Retone failed: " + concise(e)));
             }
         });
     }
 
     private String replaceLastVoiceInsertion(String oldInserted, String newText) {
+        if(!shouldAllowVoiceCapture()) return "";
         InputConnection connection = getCurrentInputConnection();
         if (connection == null || oldInserted == null || oldInserted.isEmpty()) {
             return "";
@@ -2332,6 +2388,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private boolean replaceWholeFieldText(String text) {
+        if(!shouldAllowVoiceCapture()) return false;
         InputConnection connection = getCurrentInputConnection();
         if (connection == null || text == null || text.trim().isEmpty()) {
             return false;
@@ -2396,8 +2453,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             showHistoryPanel();
             return;
         }
-        if (!hasNetworkConnectivity()) {
-            setStatus("No connection for transform");
+        if (isIncognitoEditor() || !Prefs.enableTransform(this) || !hasNetworkConnectivity()) {
+            setStatus("Enable cloud cleanup for this action");
             return;
         }
         processing = true;
@@ -2406,7 +2463,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         startStatusSpinner(item.isTranslation()
                 ? "Translating: " + styleLabel
                 : "Creating " + styleLabel);
-        executor.execute(() -> {
+        submitVoiceWork(() -> {
             try {
                 String result;
                 if (item.isTranslation()) {
@@ -2416,8 +2473,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
                 } else {
                     result = TransformClient.transform(this, item.rawText, preset, expression);
                 }
-                mainHandler.post(() -> {
-                    Prefs.updateTranscriptHistory(this, item.id, item.rawText, result, preset, expression);
+                postJob(() -> {
+                    updateCaptureHistory( item.id, item.rawText, result, preset, expression);
                     stopStatusSpinner();
                     recording = false;
                     processing = false;
@@ -2427,15 +2484,14 @@ public class VoiceFlowKeyboardService extends InputMethodService {
                     setStatus((item.isTranslation() ? "Translated - " : "Created ") + styleLabel);
                 });
             } catch (Exception e) {
-                mainHandler.post(() -> finishProcessingState("Create failed: " + concise(e)));
+                postJob(() -> finishProcessingState("Create failed: " + concise(e)));
             }
         });
     }
 
     private String prepareVoiceOutput(String text) {
         String result = text == null ? "" : text.trim();
-        result = applyPhraseReplacements(result);
-        result = removeShortTrailingPeriod(result);
+
         return result;
     }
 
@@ -2623,7 +2679,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             clearAutoCorrection();
             return;
         }
-        if (Prefs.isLearnedWord(this, word)) {
+        if (!isIncognitoEditor() && Prefs.isLearnedWord(this, word)) {
             clearAutoCorrection();
             return;
         }
@@ -2677,7 +2733,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             // The word moved on under us; a newer request is already in flight.
             return;
         }
-        if (Prefs.isLearnedWord(this, word)) {
+        if (!isIncognitoEditor() && Prefs.isLearnedWord(this, word)) {
             clearAutoCorrection();
             return;
         }
@@ -2892,7 +2948,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         if (!shouldLearnAutoCorrectionWord(word)) {
             return;
         }
-        Prefs.learnWord(this, word);
+        if(!isIncognitoEditor()) Prefs.learnWord(this, word);
     }
 
     private boolean shouldLearnAutoCorrectionWord(String word) {
@@ -2952,6 +3008,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private boolean shouldTypingAssistance() {
+        if(isIncognitoEditor()) return false;
         // English spelling help has nothing useful to say about pinyin, and
         // auto-capitalisation would fight the composer. Off for the whole of
         // Chinese mode, not just while a buffer is active.
@@ -2960,7 +3017,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         }
         EditorInfo info = getCurrentInputEditorInfo();
         if (info == null) {
-            return true;
+            return false;
         }
         int inputType = info.inputType;
         if ((inputType & InputType.TYPE_MASK_CLASS) != InputType.TYPE_CLASS_TEXT) {
@@ -2981,16 +3038,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private boolean shouldAllowVoiceCapture() {
-        EditorInfo info = getCurrentInputEditorInfo();
-        if (info == null) {
-            return true;
-        }
-        int inputType = info.inputType;
-        if ((inputType & InputType.TYPE_MASK_CLASS) != InputType.TYPE_CLASS_TEXT) {
-            return false;
-        }
-        int variation = inputType & InputType.TYPE_MASK_VARIATION;
-        return !isPasswordVariation(variation);
+        EditorInfo info=getCurrentInputEditorInfo();
+        return info!=null && EditorPolicy.allowsVoice(info.packageName,info.inputType);
     }
 
     private boolean isTypingAssistanceBlockedVariation(int variation) {
@@ -3206,7 +3255,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
 
     private PinyinEngine pinyinEngine() {
         if (pinyinEngine == null) {
-            pinyinEngine = new PinyinEngine(getAssets(), executor, mainHandler, this::onPinyinEngineReady);
+            pinyinEngine = new PinyinEngine(getAssets(), typingExecutor, mainHandler, this::onPinyinEngineReady);
         }
         return pinyinEngine;
     }
@@ -3649,12 +3698,12 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             }
             return;
         }
-        if (!shouldAllowVoiceCapture()) {
+        if (!shouldAllowVoiceCapture() || isIncognitoEditor()) {
             setStatus("Voice disabled in password fields");
             return;
         }
-        if (!hasNetworkConnectivity()) {
-            setStatus("Text creation requires a connection");
+        if (isIncognitoEditor() || !Prefs.enableTransform(this) || !hasNetworkConnectivity()) {
+            setStatus("Enable cloud cleanup for this action");
             return;
         }
         String transformProvider = Prefs.transformProvider(this);
@@ -3695,12 +3744,12 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             }
             return;
         }
-        if (!shouldAllowVoiceCapture()) {
+        if (!shouldAllowVoiceCapture() || isIncognitoEditor()) {
             setStatus("Voice disabled in password fields");
             return;
         }
-        if (!hasNetworkConnectivity()) {
-            setStatus("Voice instructions require a connection");
+        if (isIncognitoEditor() || !Prefs.enableTransform(this) || !hasNetworkConnectivity()) {
+            setStatus("Enable cloud cleanup for this action");
             return;
         }
         String transformProvider = Prefs.transformProvider(this);
@@ -3718,6 +3767,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         }
         instructionCapture = true;
         instructionSourceText = sourceText;
+        instructionSelectionStart=currentSelectionStart;
+        instructionSelectionEnd=currentSelectionEnd;
         String provider = Prefs.transcriptionProvider(this);
         if (isOfflineTranscriptionProvider(provider)) {
             toggleOfflineRecording(provider);
@@ -3748,12 +3799,12 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             }
             return;
         }
-        if (!shouldAllowVoiceCapture()) {
+        if (!shouldAllowVoiceCapture() || isIncognitoEditor()) {
             setStatus("Voice disabled in password fields");
             return;
         }
-        if (!hasNetworkConnectivity()) {
-            setStatus("Translation requires a connection");
+        if (isIncognitoEditor() || !Prefs.enableTransform(this) || !hasNetworkConnectivity()) {
+            setStatus("Enable cloud cleanup for this action");
             return;
         }
         String transformProvider = Prefs.transformProvider(this);
@@ -3799,6 +3850,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private void cancelRecording() {
+        editorGeneration++;
+        captureSession=null;
         if (!recording || processing) {
             return;
         }
@@ -3837,6 +3890,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private void toggleCloudRecording() {
+        if(isIncognitoEditor()) { setStatus("Private field requires local dictation"); return; }
         if (recording) {
             stopCloudRecordingAndTranscribe();
             return;
@@ -3851,7 +3905,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             return;
         }
         try {
-            selectedPreset = Prefs.activePreset(this);
+            beginCapture(Prefs.transcriptionProvider(this));
+            selectedPreset = resolvedPreset();
             selectedExpression = Prefs.expressionForPreset(this, selectedPreset);
             currentAudioFile = File.createTempFile("voiceflow-keyboard-", ".m4a", getCacheDir());
             recorder = createRecorder();
@@ -3861,9 +3916,16 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             recorder.setAudioEncodingBitRate(128000);
             recorder.setAudioSamplingRate(44100);
             recorder.setOutputFile(currentAudioFile.getAbsolutePath());
+            recorder.setMaxDuration(CaptureLimits.MAX_DURATION_MS);
+            recorder.setMaxFileSize(4L*1024*1024);
+            recorder.setOnInfoListener((r,what,extra) -> {
+                if(recording && (what==MediaRecorder.MEDIA_RECORDER_INFO_MAX_DURATION_REACHED
+                        || what==MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED)) recordingLimit.run();
+            });
             recorder.prepare();
             recorder.start();
             recording = true;
+            mainHandler.postDelayed(recordingLimit,CaptureLimits.MAX_DURATION_MS);
             offlineRecordingSession = false;
             setKeyboardLocked(true);
             showCaptureRecordingState();
@@ -3901,7 +3963,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         boolean translationForThisRecording = translationCapture;
         String targetForThisTranslation = translationTargetLanguage;
         DictationLanguage languageForThisRecording = dictationLanguage();
-        executor.execute(() -> {
+        submitVoiceWork(() -> {
             try {
                 String transcript = TranscriptionClient.transcribe(this, audio, languageForThisRecording);
                 processTranscribedCapture(
@@ -3915,7 +3977,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
                         targetForThisTranslation
                 );
             } catch (Exception e) {
-                mainHandler.post(() -> finishProcessingState(concise(e)));
+                postJob(() -> finishProcessingState(concise(e)));
             } finally {
                 if (!audio.delete()) {
                     audio.deleteOnExit();
@@ -3925,7 +3987,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private boolean shouldTransform(String preset) {
-        return Prefs.enableTransform(this)
+        return !isIncognitoEditor() && Prefs.enableTransform(this)
                 && !Prefs.PRESET_RAW.equals(preset)
                 && hasNetworkConnectivity();
     }
@@ -3956,13 +4018,13 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         setKeyboardLocked(true);
         micButton.setEnabled(false);
         setMicVisual(true, false);
-        startStatusSpinner("Downloading " + Prefs.providerLabel(provider));
-        executor.execute(() -> {
+        startStatusSpinner("Preparing " + Prefs.providerLabel(provider));
+        submitVoiceWork(() -> {
             try {
                 ensureOfflineModel(provider);
-                mainHandler.post(() -> finishProcessingState(Prefs.providerLabel(provider) + " ready. Tap mic to record."));
+                postJob(() -> finishProcessingState(Prefs.providerLabel(provider) + " ready. Tap mic to record."));
             } catch (Exception e) {
-                mainHandler.post(() -> finishProcessingState("Offline setup failed: " + concise(e)));
+                postJob(() -> finishProcessingState("Offline setup failed: " + concise(e)));
             }
         });
     }
@@ -3986,7 +4048,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             return;
         }
         int bufferSize = Math.max(minBuffer, offlineSampleRate(provider) * 2);
-        selectedPreset = Prefs.activePreset(this);
+        beginCapture(provider);
+        selectedPreset = resolvedPreset();
         selectedExpression = Prefs.expressionForPreset(this, selectedPreset);
         try {
             currentPcmFile = File.createTempFile("voiceflow-keyboard-", ".pcm", getCacheDir());
@@ -4012,6 +4075,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             );
             offlineRecordThread.start();
             recording = true;
+            mainHandler.postDelayed(recordingLimit,CaptureLimits.MAX_DURATION_MS);
             offlineRecordingSession = true;
             offlineRecordingProvider = provider;
             setKeyboardLocked(true);
@@ -4025,14 +4089,20 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     private void writeOfflinePcm(AudioRecord activeRecorder, File target, int bufferSize) {
         byte[] buffer = new byte[bufferSize];
         try (FileOutputStream out = new FileOutputStream(target)) {
+            long total=0;
             while (offlineRecordLoop) {
                 int read = activeRecorder.read(buffer, 0, buffer.length);
+                if (read < 0) throw new java.io.IOException("Recorder stopped");
                 if (read > 0) {
+                    total+=read;
+                    if(total>CaptureLimits.MAX_PCM_BYTES) { mainHandler.post(recordingLimit); break; }
                     out.write(buffer, 0, read);
                 }
             }
         } catch (Exception e) {
             if (offlineRecordLoop) {
+                offlineRecordLoop=false;
+                mainHandler.post(recordingLimit);
                 postStatus("Offline recording interrupted.");
             }
         }
@@ -4040,6 +4110,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
 
     private void stopOfflineRecordingAndTranscribe() {
         File pcm = currentPcmFile;
+        String providerForThisRecording = captureSession == null ? offlineRecordingProvider : captureSession.provider;
         stopOfflineRecorderOnly();
         if (pcm == null || !pcm.exists() || pcm.length() == 0) {
             finishProcessingState("No audio captured.");
@@ -4053,13 +4124,12 @@ public class VoiceFlowKeyboardService extends InputMethodService {
                 : instructionCapture ? "Transcribing instruction" : translationCapture ? "Transcribing for translation" : "Transcribing");
         String presetForThisRecording = selectedPreset;
         int expressionForThisRecording = selectedExpression;
-        String providerForThisRecording = offlineRecordingProvider;
         boolean creationForThisRecording = creationCapture;
         boolean instructionForThisRecording = instructionCapture;
         String sourceForThisInstruction = instructionSourceText;
         boolean translationForThisRecording = translationCapture;
         String targetForThisTranslation = translationTargetLanguage;
-        executor.execute(() -> {
+        submitVoiceWork(() -> {
             try {
                 String transcript = transcribeOfflinePcm(providerForThisRecording, pcm);
                 processTranscribedCapture(
@@ -4073,7 +4143,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
                         targetForThisTranslation
                 );
             } catch (Exception e) {
-                mainHandler.post(() -> finishProcessingState(concise(e)));
+                postJob(() -> finishProcessingState(concise(e)));
             } finally {
                 if (!pcm.delete()) {
                     pcm.deleteOnExit();
@@ -4095,6 +4165,10 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         String normalizedTranscript = applyPhraseReplacements(
                 transcript == null ? "" : transcript.trim()
         );
+        if (!translation && !creation && !instruction) {
+            String raw = transcript == null ? "" : transcript.trim();
+            postRawForRecovery(raw);
+        }
         if (translation) {
             String statusLanguage = compactLanguageName(targetLanguage);
             postStatusSpinner("Translating to " + statusLanguage);
@@ -4108,8 +4182,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             if (result == null || result.trim().isEmpty()) {
                 throw new IllegalStateException("Translation returned no text.");
             }
-            mainHandler.post(() -> {
-                String historyId = Prefs.addTranscriptHistory(
+            postJob(() -> {
+                String historyId = addCaptureHistory(
                         this,
                         normalizedTranscript,
                         result,
@@ -4143,8 +4217,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             if (result == null || result.trim().isEmpty()) {
                 throw new IllegalStateException("Text creation returned no text.");
             }
-            mainHandler.post(() -> {
-                String historyId = Prefs.addTranscriptHistory(
+            postJob(() -> {
+                String historyId = addCaptureHistory(
                         this,
                         normalizedTranscript,
                         result,
@@ -4178,8 +4252,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
                     instructionSource,
                     normalizedTranscript
             );
-            mainHandler.post(() -> {
-                if (replaceWholeFieldText(result)) {
+            postJob(() -> {
+                if (instructionSource.equals(currentEditableFieldText()) && replaceWholeFieldText(result)) {
                     finishProcessingState("Text updated");
                 } else {
                     finishProcessingState("Could not replace this field");
@@ -4205,8 +4279,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         }
         String result = finalText;
         String status = finalStatus;
-        mainHandler.post(() -> {
-            String historyId = Prefs.addTranscriptHistory(
+        postJob(() -> {
+            String historyId = addCaptureHistory(
                     this,
                     normalizedTranscript,
                     result,
@@ -4265,6 +4339,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private void stopCloudRecorderOnly() {
+        mainHandler.removeCallbacks(recordingLimit);
         if (recorder != null) {
             try {
                 recorder.stop();
@@ -4280,6 +4355,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private void stopOfflineRecorderOnly() {
+        mainHandler.removeCallbacks(recordingLimit);
         offlineRecordLoop = false;
         AudioRecord activeRecorder = offlineRecorder;
         offlineRecorder = null;
@@ -4344,17 +4420,153 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         startActivity(intent);
     }
 
+    private void guardKeyAction(Runnable action) {
+        try { action.run(); }
+        catch(IllegalStateException e) { setStatus("Key storage unavailable; open Settings to clear or re-enter keys"); }
+    }
+
+    private int[] insertionSelection() {
+        InputConnection connection = getCurrentInputConnection();
+        if (connection == null) return new int[]{-1, -1};
+        try {
+            ExtractedText extracted = connection.getExtractedText(new ExtractedTextRequest(), 0);
+            if (extracted != null && extracted.selectionStart >= 0 && extracted.selectionEnd >= 0) {
+                return new int[]{extracted.startOffset + extracted.selectionStart,
+                        extracted.startOffset + extracted.selectionEnd};
+            }
+        } catch (RuntimeException unavailable) {
+            return new int[]{-1, -1};
+        }
+        return new int[]{currentSelectionStart, currentSelectionEnd};
+    }
+
+    private CaptureSession snapshot(String provider) {
+        EditorInfo info = getCurrentInputEditorInfo();
+        int[] selection = insertionSelection();
+        return new CaptureSession(editorGeneration, info == null ? null : info.packageName,
+                info == null ? 0 : info.fieldId, info == null ? 0 : info.inputType, provider,
+                Prefs.historyEnabled(this) && !isIncognitoEditor(), selection[0], selection[1]);
+    }
+
+    private boolean sessionMatches(CaptureSession session) {
+        EditorInfo info = getCurrentInputEditorInfo();
+        int[] selection = insertionSelection();
+        return !destroyed && info != null && session != null
+                && session.matches(editorGeneration, info.packageName, info.fieldId, info.inputType,
+                        selection[0], selection[1]);
+    }
+
+    private void beginCapture(String provider) {
+        pendingRawTranscript = "";
+        recoverableRawTranscript = "";
+        captureSession = snapshot(provider);
+    }
+
+    private void cancelForSelectionChange() {
+        String raw = pendingRawTranscript;
+        invalidateVoiceJobs();
+        if (!isIncognitoEditor() && shouldAllowVoiceCapture()) recoverableRawTranscript = raw;
+        finishProcessingState(raw.isEmpty() ? "Cursor moved; dictation canceled"
+                : "Cursor moved; tap Recover raw dictation");
+    }
+
+    private String resolvedPreset() {
+        EditorInfo info=getCurrentInputEditorInfo();
+        return EditorPolicy.mode(info==null?null:info.packageName,info==null?0:info.inputType,
+                Prefs.activePreset(this),Prefs.automaticContext(this));
+    }
+    private boolean isIncognitoEditor() {
+        EditorInfo info=getCurrentInputEditorInfo();
+        return info!=null && EditorPolicy.incognito(info.imeOptions);
+    }
+    private void invalidateVoiceJobs() {
+        editorGeneration++;
+        captureSession=null;
+        pendingRawTranscript = "";
+        recoverableRawTranscript = "";
+        if(requestScope!=null) requestScope.cancel();
+        if(voiceJob!=null) voiceJob.cancel(true);
+        executor.getQueue().clear();
+        File audio=currentAudioFile, pcm=currentPcmFile;
+        stopRecorderSilently();
+        deleteTempFile(audio); deleteTempFile(pcm);
+    }
+    private void submitVoiceWork(Runnable work) {
+        editorGeneration++;
+        CaptureSession previous=captureSession;
+        CaptureSession session=previous==null?snapshot(Prefs.transcriptionProvider(this)):
+                new CaptureSession(editorGeneration,previous.packageName,previous.fieldId,previous.inputType,previous.provider,previous.retainHistory,previous.selectionStart,previous.selectionEnd);
+        captureSession=session;
+        SafeHttp.Scope scope=new SafeHttp.Scope();
+        requestScope=scope;
+        try {
+            voiceJob=executor.submit(() -> {
+                workerSession.set(session); SafeHttp.enter(scope);
+                try { work.run(); }
+                finally { scope.cancel(); SafeHttp.leave(); workerSession.remove(); }
+            });
+        } catch(RejectedExecutionException e) {
+            finishProcessingState("Previous dictation is still stopping; try again shortly");
+        }
+    }
+    private void postRawForRecovery(String raw) {
+        CaptureSession session = workerSession.get();
+        mainHandler.post(() -> {
+            EditorInfo info = getCurrentInputEditorInfo();
+            if (destroyed || info == null || session == null
+                    || !session.sameEditor(editorGeneration, info.packageName, info.fieldId, info.inputType)) return;
+            if (!isIncognitoEditor()) pendingRawTranscript = raw;
+            if (!sessionMatches(session) && (recording || processing)) cancelForSelectionChange();
+        });
+    }
+
+    private void postJob(Runnable callback) {
+        CaptureSession fromWorker=workerSession.get();
+        CaptureSession session=fromWorker==null?snapshot(Prefs.transcriptionProvider(this)):fromWorker;
+        mainHandler.post(() -> {
+            if (!sessionMatches(session)) {
+                EditorInfo info = getCurrentInputEditorInfo();
+                if (!destroyed && info != null && session != null && (recording || processing)
+                        && session.sameEditor(editorGeneration, info.packageName, info.fieldId, info.inputType)) {
+                    cancelForSelectionChange();
+                }
+                return;
+            }
+            deliveringVoiceResult = true;
+            try { callback.run(); }
+            finally {
+                deliveringVoiceResult = false;
+                if (!recording && !processing) {
+                    pendingRawTranscript = "";
+                    if (captureSession == session) captureSession = null;
+                }
+            }
+        });
+    }
+    private String addCaptureHistory(Context context,String raw,String result,String preset,int expression,String operation,String language) {
+        if(isIncognitoEditor() || !Prefs.historyEnabled(this) || captureSession==null || !captureSession.retainHistory) return "";
+        return Prefs.addTranscriptHistory(context,raw,result,preset,expression,operation,language);
+    }
+    private void updateCaptureHistory(String id,String raw,String result,String preset,int expression) {
+        if(!isIncognitoEditor() && Prefs.historyEnabled(this)) Prefs.updateTranscriptHistory(this,id,raw,result,preset,expression);
+    }
+
     private boolean hasAudioPermission() {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.M
                 || checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
     }
 
     private boolean isOfflineTranscriptionProvider(String provider) {
-        return Prefs.PROVIDER_OFFLINE_VOSK.equals(provider)
+        return Prefs.PROVIDER_OFFLINE_ZIPFORMER.equals(provider)
+                || Prefs.PROVIDER_OFFLINE_VOSK.equals(provider)
                 || Prefs.PROVIDER_OFFLINE_PARAKEET.equals(provider);
     }
 
     private String installedOfflineFallbackProvider() {
+        return Prefs.PROVIDER_OFFLINE_ZIPFORMER;
+    }
+
+    private String legacyInstalledOfflineFallbackProvider() {
         if (OfflineParakeetClient.isModelReady(this)) {
             return Prefs.PROVIDER_OFFLINE_PARAKEET;
         }
@@ -4365,6 +4577,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private boolean isOfflineModelReady(String provider) {
+        if (Prefs.PROVIDER_OFFLINE_ZIPFORMER.equals(provider)) return OfflineZipformerClient.isModelReady(this);
         if (Prefs.PROVIDER_OFFLINE_PARAKEET.equals(provider)) {
             return OfflineParakeetClient.isModelReady(this);
         }
@@ -4372,6 +4585,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private void ensureOfflineModel(String provider) throws Exception {
+        if(Prefs.PROVIDER_OFFLINE_ZIPFORMER.equals(provider)) { OfflineZipformerClient.ensureModel(this); return; }
         if (Prefs.PROVIDER_OFFLINE_PARAKEET.equals(provider)) {
             OfflineParakeetClient.ensureModel(this);
         } else {
@@ -4380,6 +4594,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private String transcribeOfflinePcm(String provider, File pcm) throws Exception {
+        if(Prefs.PROVIDER_OFFLINE_ZIPFORMER.equals(provider)) return OfflineZipformerClient.transcribePcm(this,pcm);
         if (Prefs.PROVIDER_OFFLINE_PARAKEET.equals(provider)) {
             return OfflineParakeetClient.transcribePcm(this, pcm);
         }
@@ -4409,7 +4624,7 @@ public class VoiceFlowKeyboardService extends InputMethodService {
     }
 
     private void postStatus(String status) {
-        mainHandler.post(() -> setStatus(status));
+        postJob(() -> setStatus(status));
     }
 
     private void startStatusSpinner(String base) {
@@ -4437,11 +4652,11 @@ public class VoiceFlowKeyboardService extends InputMethodService {
             };
         }
         mainHandler.removeCallbacks(statusSpinnerRunnable);
-        mainHandler.post(statusSpinnerRunnable);
+        postJob(statusSpinnerRunnable);
     }
 
     private void postStatusSpinner(String base) {
-        mainHandler.post(() -> startStatusSpinner(base));
+        postJob(() -> startStatusSpinner(base));
     }
 
     private void stopStatusSpinner() {
@@ -4823,35 +5038,8 @@ public class VoiceFlowKeyboardService extends InputMethodService {
         }
 
         static Palette from(VoiceFlowKeyboardService service) {
-            boolean night = (service.getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK)
-                    == Configuration.UI_MODE_NIGHT_YES;
-            int accent = service.resolveThemeColor(android.R.attr.colorAccent, night ? Color.rgb(100, 181, 246) : Color.rgb(25, 103, 210));
-            if (night) {
-                return new Palette(
-                        Color.rgb(32, 33, 36),
-                        Color.rgb(45, 46, 50),
-                        Color.rgb(58, 59, 63),
-                        Color.rgb(74, 75, 80),
-                        Color.rgb(241, 243, 244),
-                        Color.rgb(82, 83, 88),
-                        accent,
-                        Color.WHITE,
-                        Color.rgb(198, 40, 40),
-                        Color.WHITE
-                );
-            }
-            return new Palette(
-                    Color.rgb(238, 240, 243),
-                    Color.rgb(247, 248, 250),
-                    Color.WHITE,
-                    Color.rgb(224, 228, 233),
-                    Color.rgb(31, 35, 40),
-                    Color.rgb(218, 223, 230),
-                    accent,
-                    Color.WHITE,
-                    Color.rgb(191, 54, 12),
-                    Color.WHITE
-            );
+            return new Palette(0xff0b111a,0xff151e29,0xff202c38,0xff344452,0xfff4f7f5,
+                    0xff344452,0xff73e0c4,0xff071e1b,0xffef9a9a,0xff301010);
         }
     }
 

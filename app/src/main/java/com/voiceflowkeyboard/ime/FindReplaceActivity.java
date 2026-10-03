@@ -47,7 +47,7 @@ public class FindReplaceActivity extends Activity {
 
         TextView note = Ui.text(
                 this,
-                "Teach VoiceFlow exact spellings for names, nicknames, jargon, and commands. "
+                "Teach Venith Dictation exact spellings for names, nicknames, jargon, and commands. "
                         + "GPT Transcribe receives the preferred spelling as a vocabulary hint, and the heard forms below provide a guaranteed local correction.",
                 14,
                 false,
@@ -140,7 +140,7 @@ public class FindReplaceActivity extends Activity {
             to.setText(replacements.get(index).to);
             context.setText(replacements.get(index).context);
         }
-        fields.addView(label("What VoiceFlow may hear — one form per line"));
+        fields.addView(label("What Venith Dictation may hear — one form per line"));
         fields.addView(from);
         fields.addView(label("Exact spelling or phrase"));
         fields.addView(to);

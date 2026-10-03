@@ -41,7 +41,7 @@ final class XAiClient {
     static String transcribe(Context context, File audioFile) throws Exception {
         String apiKey = requiredApiKey(context);
         String boundary = "VoiceFlowKeyboardBoundary" + System.currentTimeMillis();
-        HttpURLConnection connection = (HttpURLConnection) new URL(STT_URL).openConnection();
+        HttpURLConnection connection = SafeHttp.open(STT_URL);
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
         connection.setConnectTimeout(30000);
@@ -94,7 +94,6 @@ final class XAiClient {
         JSONObject body = new JSONObject()
                 .put("model", model)
                 .put("temperature", 0)
-                .put("reasoning_effort", "none")
                 .put("messages", new JSONArray()
                         .put(new JSONObject()
                                 .put("role", "system")
@@ -103,22 +102,15 @@ final class XAiClient {
                                 .put("role", "user")
                                 .put("content", input)));
 
-        String response;
-        try {
-            response = sendChat(apiKey, body);
-        } catch (IOException e) {
-            if (!looksLikeReasoningOptionRejection(e)) {
-                throw e;
-            }
-            body.remove("reasoning_effort");
-            response = sendChat(apiKey, body);
-        }
+        // Do not send model-specific reasoning hints or retry authenticated failures.
+        String response = sendChat(apiKey, body);
 
         JSONObject json = new JSONObject(response);
         JSONArray choices = json.optJSONArray("choices");
         if (choices != null && choices.length() > 0) {
             JSONObject choice = choices.optJSONObject(0);
-            JSONObject message = choice == null ? null : choice.optJSONObject("message");
+            if(choice==null || !"stop".equals(choice.optString("finish_reason"))) throw new IOException("Cleanup incomplete; keeping raw text");
+            JSONObject message = choice.optJSONObject("message");
             String content = message == null ? "" : message.optString("content", "");
             if (!content.trim().isEmpty()) {
                 return stripWholeOutputWrappers(content).trim();
@@ -132,7 +124,7 @@ final class XAiClient {
         if (trimmedKey.isEmpty()) {
             throw new IllegalStateException("Add your xAI API key first.");
         }
-        HttpURLConnection connection = (HttpURLConnection) new URL(MODELS_URL).openConnection();
+        HttpURLConnection connection = SafeHttp.open(MODELS_URL);
         connection.setRequestMethod("GET");
         connection.setConnectTimeout(30000);
         connection.setReadTimeout(30000);
@@ -202,7 +194,7 @@ final class XAiClient {
     }
 
     private static String sendChat(String apiKey, JSONObject body) throws IOException {
-        HttpURLConnection connection = (HttpURLConnection) new URL(CHAT_URL).openConnection();
+        HttpURLConnection connection = SafeHttp.open(CHAT_URL);
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
         connection.setConnectTimeout(30000);
@@ -237,37 +229,10 @@ final class XAiClient {
     }
 
     private static String readResponse(HttpURLConnection connection, String label) throws IOException {
-        int code = connection.getResponseCode();
-        InputStream stream = code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream();
-        String body = readAll(stream);
-        if (code < 200 || code >= 300) {
-            throw new IOException(label + " failed (" + code + "): " + body);
-        }
-        return body;
+        return SafeHttp.response(connection,label);
     }
 
-    private static String readAll(InputStream stream) throws IOException {
-        if (stream == null) {
-            return "";
-        }
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            StringBuilder builder = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                builder.append(line);
-            }
-            return builder.toString();
-        }
-    }
 
-    private static boolean looksLikeReasoningOptionRejection(IOException e) {
-        String message = String.valueOf(e.getMessage()).toLowerCase(Locale.US);
-        return message.contains("reasoning_effort")
-                || message.contains("unsupported")
-                || message.contains("unknown parameter")
-                || message.contains("unrecognized")
-                || message.contains("invalid parameter");
-    }
 
     private static String stripWholeOutputWrappers(String text) {
         String result = text == null ? "" : text.trim();

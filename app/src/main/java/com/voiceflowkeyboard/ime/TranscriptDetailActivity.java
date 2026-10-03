@@ -233,7 +233,7 @@ public class TranscriptDetailActivity extends Activity {
 
         for (String variant : availableVariants()) {
             boolean selected = variant.equals(selectedVariant);
-            TextView chip = Ui.text(this, labelForVariant(variant), 14, true, selected ? Color.WHITE : Ui.TEXT);
+            TextView chip = Ui.text(this, labelForVariant(variant), 14, true, selected ? Ui.ON_ACCENT : Ui.TEXT);
             chip.setGravity(Gravity.CENTER);
             chip.setSingleLine(true);
             chip.setEllipsize(TextUtils.TruncateAt.END);
@@ -339,7 +339,7 @@ public class TranscriptDetailActivity extends Activity {
             Toast.makeText(this, "Nothing to copy", Toast.LENGTH_SHORT).show();
             return;
         }
-        clipboard.setPrimaryClip(ClipData.newPlainText("VoiceFlow transcript", text.trim()));
+        clipboard.setPrimaryClip(ClipData.newPlainText("Venith Dictation transcript", text.trim()));
         Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show();
     }
 

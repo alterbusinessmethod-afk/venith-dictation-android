@@ -30,22 +30,28 @@ final class OfflineVoskClient {
 
     static boolean isModelReady(Context context) {
         File dir = modelDir(context);
-        return new File(dir, "conf").isDirectory()
+        return OptionalModelIntegrity.ready(dir) && new File(dir, "conf").isDirectory()
                 && new File(dir, "am").isDirectory()
                 && new File(dir, "graph").isDirectory();
     }
 
     static void ensureModel(Context context) throws IOException {
-        if (isModelReady(context)) {
-            return;
-        }
+        if (isModelReady(context) && OptionalModelIntegrity.verify(modelDir(context))) return;
         File root = modelRoot(context);
         if (!root.exists() && !root.mkdirs()) {
             throw new IOException("Could not create offline model directory.");
         }
         File zip = new File(context.getCacheDir(), MODEL_ID + ".zip");
         download(MODEL_URL, zip);
-        unzip(zip, root);
+        File stage=new File(root,"staging-"+java.util.UUID.randomUUID());
+        if(!stage.mkdir()) throw new IOException("Could not stage optional model");
+        unzip(zip, stage);
+        File staged=new File(stage,MODEL_ID);
+        if(!new File(staged,"am/final.mdl").isFile() || !new File(staged,"conf/model.conf").isFile()) throw new IOException("Incomplete optional model");
+        OptionalModelIntegrity.record(staged);
+        File target=modelDir(context);
+        if(target.exists() && !target.renameTo(new File(root,"invalid-"+java.util.UUID.randomUUID()))) throw new IOException("Could not preserve model");
+        if(!staged.renameTo(target)) throw new IOException("Could not activate optional model");
         if (!zip.delete()) {
             zip.deleteOnExit();
         }
@@ -55,21 +61,26 @@ final class OfflineVoskClient {
     }
 
     static String transcribePcm(Context context, File pcmFile) throws Exception {
+        if(pcmFile.length()>CaptureLimits.MAX_PCM_BYTES) throw new IOException("Recording too long");
         ensureModel(context);
         Model model = null;
         Recognizer recognizer = null;
         try {
             model = new Model(modelDir(context).getAbsolutePath());
             recognizer = new Recognizer(model, SAMPLE_RATE);
+            VoskSegments segments = new VoskSegments();
             try (InputStream in = new BufferedInputStream(new FileInputStream(pcmFile))) {
                 byte[] buffer = new byte[4096];
                 int read;
                 while ((read = in.read(buffer)) != -1) {
-                    recognizer.acceptWaveForm(buffer, read);
+                    if(Thread.currentThread().isInterrupted()) throw new IOException("Transcription canceled");
+                    if (recognizer.acceptWaveForm(buffer, read)) {
+                        segments.append(new JSONObject(recognizer.getResult()).optString("text", ""));
+                    }
                 }
             }
-            JSONObject json = new JSONObject(recognizer.getFinalResult());
-            String text = json.optString("text", "").trim();
+            segments.append(new JSONObject(recognizer.getFinalResult()).optString("text", ""));
+            String text = segments.text();
             if (!text.isEmpty()) {
                 return text;
             }
@@ -99,31 +110,18 @@ final class OfflineVoskClient {
     }
 
     private static void download(String url, File destination) throws IOException {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setConnectTimeout(30000);
-        connection.setReadTimeout(120000);
-        int code = connection.getResponseCode();
-        if (code < 200 || code >= 300) {
-            throw new IOException("Offline model download failed (" + code + ").");
-        }
-        try (InputStream in = new BufferedInputStream(connection.getInputStream());
-             FileOutputStream fileOut = new FileOutputStream(destination);
-             BufferedOutputStream out = new BufferedOutputStream(fileOut)) {
-            byte[] buffer = new byte[8192];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
-            }
-        }
+        ModelDownload.download(url,destination,80L*1024*1024);
     }
 
     private static void unzip(File zip, File destinationRoot) throws IOException {
         String rootPath = destinationRoot.getCanonicalPath() + File.separator;
         try (ZipInputStream in = new ZipInputStream(new BufferedInputStream(new FileInputStream(zip)))) {
             ZipEntry entry;
+            int entries=0; long expanded=0;
             byte[] buffer = new byte[8192];
             while ((entry = in.getNextEntry()) != null) {
-                File outFile = new File(destinationRoot, entry.getName());
+                if(++entries>256) throw new IOException("Model entry limit exceeded");
+                File outFile = ModelFiles.contained(destinationRoot, entry.getName());
                 String outPath = outFile.getCanonicalPath();
                 if (!outPath.startsWith(rootPath)) {
                     throw new IOException("Blocked unsafe model zip path.");
@@ -141,6 +139,9 @@ final class OfflineVoskClient {
                          BufferedOutputStream out = new BufferedOutputStream(fileOut)) {
                         int read;
                         while ((read = in.read(buffer)) != -1) {
+                            if(Thread.currentThread().isInterrupted()) throw new IOException("Model setup canceled");
+                            expanded+=read;
+                            if(expanded>150L*1024*1024) throw new IOException("Expanded model limit exceeded");
                             out.write(buffer, 0, read);
                         }
                     }

@@ -105,8 +105,8 @@ public class ModelPickerActivity extends Activity {
         root.removeAllViews();
 
         TextView note = Ui.text(this, transcription
-                ? "Choose a voice provider, then choose the transcription model to use."
-                : "Choose a transform provider, then choose the cleanup model to use.", 14, false, Ui.MUTED);
+                ? "Recommended: bundled Zipformer English. Local speech stays on this phone. Vosk is a smaller optional download; Parakeet is heavier."
+                : "Cleanup is optional. It sends transcript text to the chosen cloud provider. A separate cloud speech choice sends audio to that speech provider.", 14, false, Ui.MUTED);
         note.setPadding(0, 0, 0, dp(8));
         root.addView(note);
 
@@ -158,7 +158,7 @@ public class ModelPickerActivity extends Activity {
         LinearLayout providerSection = section(root, "Provider");
         providerSection.addView(row(Prefs.providerLabel(provider), providerModelSubtitle(provider), "Change", v -> renderProviders()));
 
-        if (cloudApiRequired(provider) && !Prefs.hasApiKeyForProvider(this, provider)) {
+        if (cloudApiRequired(provider) && !hasProviderKey(provider)) {
             LinearLayout setup = section(root, "Setup");
             setup.addView(row("API key", Prefs.providerLabel(provider) + " key required for cloud use", ">", v -> startActivity(new Intent(this, ApiKeysActivity.class))));
         }
@@ -195,13 +195,19 @@ public class ModelPickerActivity extends Activity {
     private void loadModels(String provider) {
         list.removeAllViews();
         list.addView(loadingRow("Loading models..."));
-        String apiKey = Prefs.apiKeyForProvider(this, provider);
         boolean showAll = Prefs.showAllOpenAiModels(this);
 
+        if (Prefs.PROVIDER_OFFLINE_ZIPFORMER.equals(provider)) {
+            renderModelsList(provider, OfflineZipformerClient.defaultTranscriptionModels(),
+                    OfflineZipformerClient.isModelReady(this)
+                            ? "Recommended. Bundled English model is ready on this device."
+                            : "Recommended. Included in the APK; first use prepares it on this device with no download.");
+            return;
+        }
         if (Prefs.PROVIDER_OFFLINE_VOSK.equals(provider)) {
             renderModelsList(provider, OfflineVoskClient.defaultTranscriptionModels(), OfflineVoskClient.isModelReady(this)
                     ? "The local model is installed and runs on-device."
-                    : "This model downloads on first use, then runs on-device.");
+                    : "Optional compact model downloads on first use, then runs on-device.");
             return;
         }
         if (Prefs.PROVIDER_OFFLINE_PARAKEET.equals(provider)) {
@@ -216,6 +222,13 @@ public class ModelPickerActivity extends Activity {
         }
         if (transcription && Prefs.PROVIDER_DEEPGRAM.equals(provider)) {
             renderModelsList(provider, DeepgramClient.defaultTranscriptionModels(), "Deepgram Nova models are recommended for pre-recorded dictation.");
+            return;
+        }
+        String apiKey;
+        try {
+            apiKey = Prefs.apiKeyForProvider(this, provider);
+        } catch (IllegalStateException e) {
+            renderModelsList(provider, defaultModels(provider), "Key storage is unavailable. Local speech remains available.");
             return;
         }
         if (apiKey == null || apiKey.trim().isEmpty()) {
@@ -282,7 +295,9 @@ public class ModelPickerActivity extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(dp(60));
         row.setPadding(dp(16), dp(14), dp(14), dp(14));
+        row.setContentDescription(title + ". " + subtitle);
         row.setClickable(listener != null);
         if (listener != null) {
             row.setOnClickListener(listener);
@@ -312,6 +327,7 @@ public class ModelPickerActivity extends Activity {
         });
         row.addView(Ui.text(this, title, 16, true, Ui.TEXT), new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         checkBox.setButtonTintList(android.content.res.ColorStateList.valueOf(Ui.ACCENT));
+        checkBox.setContentDescription(title);
         checkBox.setOnClickListener(v -> onChanged.run());
         row.addView(checkBox);
         return row;
@@ -391,7 +407,7 @@ public class ModelPickerActivity extends Activity {
         if (current) {
             return "Current: " + currentModel();
         }
-        if (cloudApiRequired(provider) && !Prefs.hasApiKeyForProvider(this, provider)) {
+        if (cloudApiRequired(provider) && !hasProviderKey(provider)) {
             return capability(provider) + " - API key needed";
         }
         return capability(provider);
@@ -401,13 +417,16 @@ public class ModelPickerActivity extends Activity {
         if (provider.equals(currentProvider())) {
             return "Current model: " + currentModel();
         }
-        if (cloudApiRequired(provider) && !Prefs.hasApiKeyForProvider(this, provider)) {
+        if (cloudApiRequired(provider) && !hasProviderKey(provider)) {
             return "API key needed before use";
         }
         return "Ready to choose a model";
     }
 
     private String capability(String provider) {
+        if (Prefs.PROVIDER_OFFLINE_ZIPFORMER.equals(provider)) {
+            return "Recommended English speech, bundled in APK, on-device";
+        }
         if (Prefs.PROVIDER_ANTHROPIC.equals(provider)) {
             return "Transform only";
         }
@@ -432,6 +451,9 @@ public class ModelPickerActivity extends Activity {
 
     private List<String> defaultModels(String provider) {
         if (transcription) {
+            if (Prefs.PROVIDER_OFFLINE_ZIPFORMER.equals(provider)) {
+                return OfflineZipformerClient.defaultTranscriptionModels();
+            }
             if (Prefs.PROVIDER_XAI.equals(provider)) {
                 return XAiClient.defaultTranscriptionModels();
             }
@@ -475,8 +497,17 @@ public class ModelPickerActivity extends Activity {
     }
 
     private boolean cloudApiRequired(String provider) {
-        return !Prefs.PROVIDER_OFFLINE_VOSK.equals(provider)
+        return !Prefs.PROVIDER_OFFLINE_ZIPFORMER.equals(provider)
+                && !Prefs.PROVIDER_OFFLINE_VOSK.equals(provider)
                 && !Prefs.PROVIDER_OFFLINE_PARAKEET.equals(provider);
+    }
+
+    private boolean hasProviderKey(String provider) {
+        try {
+            return Prefs.hasApiKeyForProvider(this, provider);
+        } catch (IllegalStateException e) {
+            return false;
+        }
     }
 
     private boolean liveModelListSupported(String provider) {
@@ -485,7 +516,8 @@ public class ModelPickerActivity extends Activity {
     }
 
     private boolean manualModelAllowed(String provider) {
-        return !Prefs.PROVIDER_OFFLINE_VOSK.equals(provider)
+        return !Prefs.PROVIDER_OFFLINE_ZIPFORMER.equals(provider)
+                && !Prefs.PROVIDER_OFFLINE_VOSK.equals(provider)
                 && !Prefs.PROVIDER_OFFLINE_PARAKEET.equals(provider);
     }
 
@@ -495,12 +527,13 @@ public class ModelPickerActivity extends Activity {
 
     private String[] allProviderIds() {
         return new String[]{
+                Prefs.PROVIDER_OFFLINE_ZIPFORMER,
+                Prefs.PROVIDER_OFFLINE_VOSK,
+                Prefs.PROVIDER_OFFLINE_PARAKEET,
                 Prefs.PROVIDER_OPENAI,
                 Prefs.PROVIDER_XAI,
                 Prefs.PROVIDER_ANTHROPIC,
-                Prefs.PROVIDER_DEEPGRAM,
-                Prefs.PROVIDER_OFFLINE_PARAKEET,
-                Prefs.PROVIDER_OFFLINE_VOSK
+                Prefs.PROVIDER_DEEPGRAM
         };
     }
 
@@ -530,6 +563,9 @@ public class ModelPickerActivity extends Activity {
         }
         if (lower.contains("vosk")) {
             return "Small local offline speech-to-text";
+        }
+        if (lower.contains("zipformer")) {
+            return "Recommended bundled English speech-to-text";
         }
         if (lower.contains("parakeet")) {
             return "High-accuracy local English speech-to-text";

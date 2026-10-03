@@ -15,6 +15,17 @@ window.xml
 captures/
 .DS_Store
 Thumbs.db
+app/src/main/assets/models/zipformer-en/*.onnx
+private-signing/
+build-receipts/
+*.truncated.bak
+*.bak
+app/src/androidTest/assets/speech.pcm
+app/src/androidTest/assets/speech-source.json
+smoke-evidence/
+build-verification.log
+*.download
+*.previous
 
 # Evaluation-only spelling corpora. Fetched by scripts/fetch-corpora.sh,
 # never committed: their licence terms are unstated upstream.

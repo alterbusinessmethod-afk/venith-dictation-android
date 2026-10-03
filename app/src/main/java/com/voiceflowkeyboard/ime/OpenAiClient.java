@@ -16,8 +16,6 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -69,7 +67,7 @@ final class OpenAiClient {
                 : Collections.emptyList();
         String boundary = "VoiceFlowKeyboardBoundary" + System.currentTimeMillis();
 
-        HttpURLConnection connection = (HttpURLConnection) new URL(TRANSCRIPTIONS_URL).openConnection();
+        HttpURLConnection connection = SafeHttp.open(TRANSCRIPTIONS_URL);
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
         connection.setConnectTimeout(30000);
@@ -113,8 +111,7 @@ final class OpenAiClient {
                 context,
                 nonEmpty(Prefs.transformModelForPreset(context, preset), "gpt-5.4-mini"),
                 prompt,
-                "Transcript:\n" + transcript,
-                Prefs.historyVariantKey(preset, expression)
+                "Transcript:\n" + transcript
         );
     }
 
@@ -124,8 +121,7 @@ final class OpenAiClient {
                 context,
                 nonEmpty(Prefs.transformModel(context), "gpt-5.4-mini"),
                 prompt,
-                input,
-                "instruction"
+                input
         );
     }
 
@@ -133,27 +129,17 @@ final class OpenAiClient {
             Context context,
             String model,
             String prompt,
-            String input,
-            String cacheKey
+            String input
     ) throws Exception {
         String apiKey = requiredApiKey(context);
-        JSONObject baseBody = new JSONObject()
+        // Optional reasoning/cache/verbosity hints vary by model; use the portable request.
+        JSONObject body = new JSONObject()
                 .put("model", model)
                 .put("input", prompt + OUTPUT_CONTRACT + "\n\n" + input);
-
-        JSONObject body = new JSONObject(baseBody.toString());
-        boolean hasLatencyOptions = addLatencyOptions(body, model, cacheKey, prompt);
-        String response;
-        try {
-            response = sendResponsesRequest(apiKey, body);
-        } catch (IOException e) {
-            if (!hasLatencyOptions || !looksLikeLatencyOptionRejection(e)) {
-                throw e;
-            }
-            response = sendResponsesRequest(apiKey, baseBody);
-        }
+        String response = sendResponsesRequest(apiKey, body);
 
         JSONObject json = new JSONObject(response);
+        if("incomplete".equals(json.optString("status"))) throw new IOException("Cleanup incomplete; keeping raw text");
         String parsed = findOutputText(json);
         String cleaned = stripWholeOutputWrappers(parsed).trim();
         if (!cleaned.isEmpty()) {
@@ -167,7 +153,7 @@ final class OpenAiClient {
         if (trimmedKey.isEmpty()) {
             throw new IllegalStateException("Add your OpenAI API key first.");
         }
-        HttpURLConnection connection = (HttpURLConnection) new URL(MODELS_URL).openConnection();
+        HttpURLConnection connection = SafeHttp.open(MODELS_URL);
         connection.setRequestMethod("GET");
         connection.setConnectTimeout(30000);
         connection.setReadTimeout(30000);
@@ -345,7 +331,7 @@ final class OpenAiClient {
     }
 
     private static String sendResponsesRequest(String apiKey, JSONObject body) throws IOException {
-        HttpURLConnection connection = (HttpURLConnection) new URL(RESPONSES_URL).openConnection();
+        HttpURLConnection connection = SafeHttp.open(RESPONSES_URL);
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
         connection.setConnectTimeout(30000);
@@ -358,45 +344,6 @@ final class OpenAiClient {
         }
 
         return readResponse(connection);
-    }
-
-    private static boolean addLatencyOptions(JSONObject body, String model, String preset, String prompt) throws Exception {
-        String normalized = model.toLowerCase(Locale.US);
-        boolean gpt5Model = normalized.startsWith("gpt-5");
-        boolean reasoningModel = gpt5Model || normalized.startsWith("o");
-
-        body.put("prompt_cache_key", promptCacheKey(model, preset, prompt));
-        if (gpt5Model) {
-            if (!normalized.startsWith("gpt-5.6")) {
-                body.put("prompt_cache_retention", "24h");
-            }
-            body.put("text", new JSONObject().put("verbosity", "low"));
-        }
-        if (reasoningModel) {
-            body.put("reasoning", new JSONObject().put("effort", gpt5Model ? "none" : "low"));
-        }
-        return true;
-    }
-
-    private static String promptCacheKey(String model, String preset, String prompt) throws NoSuchAlgorithmException {
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] hash = digest.digest((model + "\n" + preset + "\n" + prompt).getBytes(StandardCharsets.UTF_8));
-        StringBuilder builder = new StringBuilder("vk-");
-        for (int i = 0; i < 12 && i < hash.length; i++) {
-            builder.append(String.format(Locale.US, "%02x", hash[i]));
-        }
-        return builder.toString();
-    }
-
-    private static boolean looksLikeLatencyOptionRejection(IOException e) {
-        String message = String.valueOf(e.getMessage()).toLowerCase(Locale.US);
-        return message.contains("unsupported")
-                || message.contains("unknown parameter")
-                || message.contains("unrecognized")
-                || message.contains("invalid parameter")
-                || message.contains("prompt_cache")
-                || message.contains("reasoning")
-                || message.contains("verbosity");
     }
 
     private static String stripWholeOutputWrappers(String text) {
@@ -449,28 +396,10 @@ final class OpenAiClient {
     }
 
     private static String readResponse(HttpURLConnection connection) throws IOException {
-        int code = connection.getResponseCode();
-        InputStream stream = code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream();
-        String body = readAll(stream);
-        if (code < 200 || code >= 300) {
-            throw new IOException("OpenAI request failed (" + code + "): " + body);
-        }
-        return body;
+        return SafeHttp.response(connection,"Provider request");
     }
 
-    private static String readAll(InputStream stream) throws IOException {
-        if (stream == null) {
-            return "";
-        }
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            StringBuilder builder = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                builder.append(line);
-            }
-            return builder.toString();
-        }
-    }
+
 
     private static String findOutputText(Object value) {
         if (value instanceof JSONObject) {

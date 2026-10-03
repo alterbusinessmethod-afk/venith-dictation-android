@@ -1,0 +1,11 @@
+# Speech and cleanup choices
+
+The bundled default is **Zipformer GigaSpeech English int8**, served through the existing Sherpa-ONNX runtime. Its encoder, decoder, joiner and tokens total 75,208,256 bytes. This is a practical compact choice that fits the fork's existing native architecture. It is not a claim of best accuracy for every accent or measured phone RAM under 1 GB. Files are pinned to the [official model repository revision](https://huggingface.co/k2-fsa/sherpa-onnx-zipformer-gigaspeech-2023-12-12/tree/c9e185789e2067cbf79350c7f691d5d2d4c5a28a) and verified before activation. See [official Sherpa documentation](https://k2-fsa.github.io/sherpa/onnx/pretrained_models/offline-transducer/zipformer-transducer-models.html#sherpa-onnx-zipformer-gigaspeech-2023-12-12-english).
+
+Small Vosk English is retained as an optional lightweight alternative; its download is about 41 MB. Parakeet v2 int8 is retained for users willing to download a considerably larger model (about 661 MB for its required inference files in the researched bundle). Neither replaces the bundled default automatically. Model download size, installed storage and peak working RAM are separate quantities. Do not infer phone RAM from file size.
+
+Moonshine Tiny v2 and Whisper were considered. Adopting them here requires a different verified decoder/runtime path and fresh Android performance checks; they were not substituted on an untested assumption. No cross-model accuracy benchmark was performed on the owner's speech.
+
+**Claude Sonnet 4.6** remains the default cleanup choice because it matches the requested laptop workflow and existing Anthropic client. The app supports an editable model ID and prompt. Haiku and newer Sonnet/OpenAI/Gemini options were researched as cost or capability alternatives, but no paid comparison establishes a better cleaner for this user's voice. Provider availability and prices can change; consult the provider documentation before switching.
+
+Cleanup prompts instruct the model to treat speech as text to edit, preserve content and uncertainty, and never answer dictated AI questions. Additional output checks reject selected suspicious changes, but they do not prove semantic equivalence for every possible rewrite. Review consequential messages before sending. Your exact laptop prompt can be pasted into the Prompt editor when available.

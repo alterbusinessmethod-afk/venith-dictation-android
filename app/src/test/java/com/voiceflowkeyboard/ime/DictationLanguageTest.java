@@ -72,8 +72,8 @@ public class DictationLanguageTest {
      */
     @Test
     public void unknownProviderFollowsTheOpenAiFallback() {
-        assertEquals(Prefs.PROVIDER_OPENAI, Prefs.sanitizeTranscriptionProvider("something-else"));
-        assertTrue(Prefs.supportsChineseDictation("something-else"));
-        assertTrue(Prefs.supportsChineseDictation(null));
+        assertEquals(Prefs.PROVIDER_OFFLINE_ZIPFORMER, Prefs.sanitizeTranscriptionProvider("something-else"));
+        assertFalse(Prefs.supportsChineseDictation("something-else"));
+        assertFalse(Prefs.supportsChineseDictation(null));
     }
 }

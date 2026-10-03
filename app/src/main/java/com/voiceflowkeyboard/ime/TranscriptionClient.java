@@ -20,6 +20,7 @@ final class TranscriptionClient {
         if (Prefs.PROVIDER_DEEPGRAM.equals(provider)) {
             return DeepgramClient.transcribe(context, audioFile, language);
         }
-        return OpenAiClient.transcribe(context, audioFile, language);
+        if(Prefs.PROVIDER_OPENAI.equals(provider)) return OpenAiClient.transcribe(context, audioFile, language);
+        throw new IllegalStateException("Select a supported cloud transcription provider");
     }
 }

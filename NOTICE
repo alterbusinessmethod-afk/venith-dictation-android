@@ -1,0 +1,16 @@
+Venith Dictation for Android
+MIT-licensed modifications for Venith, 2026.
+
+Based on VoiceFlow Keyboard Android by yutungh:
+https://github.com/yutungh/voiceflow-keyboard-android
+Upstream base: 231899b4bf685a1f37df11ac858189c6bcd136c5
+Original MIT copyright and license are retained in LICENSE and assets/licenses/VoiceFlow-MIT.txt.
+
+Bundled model: k2-fsa/sherpa-onnx-zipformer-gigaspeech-2023-12-12
+Revision c9e185789e2067cbf79350c7f691d5d2d4c5a28a, Apache-2.0.
+Model metadata, original card and license are retained in assets/models/zipformer-en.
+
+Test-only LibriSpeech 1089-134686-0001 sample: CC BY 4.0.
+Vassil Panayotov, Guoguo Chen, Daniel Povey and Sanjeev Khudanpur.
+https://www.openslr.org/12
+The WAV is converted to mono 16kHz PCM without content editing. Test fixtures are not bundled in the release APK.

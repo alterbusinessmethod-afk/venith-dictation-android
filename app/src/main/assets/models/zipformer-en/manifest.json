@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "model_id": "sherpa-onnx-zipformer-gigaspeech-2023-12-12",
+  "language": "en",
+  "source_repo": "k2-fsa/sherpa-onnx-zipformer-gigaspeech-2023-12-12",
+  "source_commit": "c9e185789e2067cbf79350c7f691d5d2d4c5a28a",
+  "license": "Apache-2.0",
+  "license_url": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+  "model_card_url": "https://huggingface.co/k2-fsa/sherpa-onnx-zipformer-gigaspeech-2023-12-12/raw/c9e185789e2067cbf79350c7f691d5d2d4c5a28a/README.md",
+  "observed_at_utc": "2026-10-03T18:48:01.957891+00:00",
+  "files": [
+    {
+      "filename": "encoder-epoch-30-avg-1.int8.onnx",
+      "url": "https://huggingface.co/k2-fsa/sherpa-onnx-zipformer-gigaspeech-2023-12-12/resolve/c9e185789e2067cbf79350c7f691d5d2d4c5a28a/encoder-epoch-30-avg-1.int8.onnx",
+      "bytes": 72850738,
+      "sha256": "62be226a7b28a38e82cc522184ee01c46751df06bdd070dc9e1572a836ebbe78",
+      "expected_lfs_sha256": "62be226a7b28a38e82cc522184ee01c46751df06bdd070dc9e1572a836ebbe78",
+      "expected_bytes": 72850738,
+      "verified": true
+    },
+    {
+      "filename": "decoder-epoch-30-avg-1.onnx",
+      "url": "https://huggingface.co/k2-fsa/sherpa-onnx-zipformer-gigaspeech-2023-12-12/resolve/c9e185789e2067cbf79350c7f691d5d2d4c5a28a/decoder-epoch-30-avg-1.onnx",
+      "bytes": 2093081,
+      "sha256": "78038bec0ef6a53c498a2d1e5b8402e10b3ca1166f344146b9e20f9b7be710a4",
+      "expected_lfs_sha256": "78038bec0ef6a53c498a2d1e5b8402e10b3ca1166f344146b9e20f9b7be710a4",
+      "expected_bytes": 2093081,
+      "verified": true
+    },
+    {
+      "filename": "joiner-epoch-30-avg-1.int8.onnx",
+      "url": "https://huggingface.co/k2-fsa/sherpa-onnx-zipformer-gigaspeech-2023-12-12/resolve/c9e185789e2067cbf79350c7f691d5d2d4c5a28a/joiner-epoch-30-avg-1.int8.onnx",
+      "bytes": 259417,
+      "sha256": "80160e45cca71dd52f6b0a6d3d12be18126f5308b2d4ba03f001300fea377c64",
+      "expected_lfs_sha256": "80160e45cca71dd52f6b0a6d3d12be18126f5308b2d4ba03f001300fea377c64",
+      "expected_bytes": 259417,
+      "verified": true
+    },
+    {
+      "filename": "tokens.txt",
+      "url": "https://huggingface.co/k2-fsa/sherpa-onnx-zipformer-gigaspeech-2023-12-12/resolve/c9e185789e2067cbf79350c7f691d5d2d4c5a28a/tokens.txt",
+      "bytes": 5020,
+      "sha256": "0ef7d736bf4de3ef947292e4b119ef13f6808cd5f3aec225a843a7135ac1c2ce",
+      "expected_lfs_sha256": null,
+      "expected_bytes": 5020,
+      "verified": true
+    }
+  ],
+  "total_model_bytes": 75208256,
+  "config": {
+    "model_type": "transducer",
+    "encoder": "encoder-epoch-30-avg-1.int8.onnx",
+    "decoder": "decoder-epoch-30-avg-1.onnx",
+    "joiner": "joiner-epoch-30-avg-1.int8.onnx",
+    "tokens": "tokens.txt",
+    "sample_rate": 16000,
+    "feature_dim": 80,
+    "num_threads": 2,
+    "provider": "cpu",
+    "decoding_method": "greedy_search"
+  },
+  "runtime_execution_verified": false,
+  "device_ram_measured": false
+}

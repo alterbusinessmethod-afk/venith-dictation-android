@@ -44,7 +44,7 @@ final class DeepgramClient {
         if (!deepgramLanguage.isEmpty()) {
             url += "&language=" + URLEncoder.encode(deepgramLanguage, "UTF-8");
         }
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
+        HttpURLConnection connection = SafeHttp.open(url);
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
         connection.setConnectTimeout(30000);
@@ -86,28 +86,10 @@ final class DeepgramClient {
     }
 
     private static String readResponse(HttpURLConnection connection) throws IOException {
-        int code = connection.getResponseCode();
-        InputStream stream = code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream();
-        String body = readAll(stream);
-        if (code < 200 || code >= 300) {
-            throw new IOException("Deepgram transcription failed (" + code + "): " + body);
-        }
-        return body;
+        return SafeHttp.response(connection,"Provider request");
     }
 
-    private static String readAll(InputStream stream) throws IOException {
-        if (stream == null) {
-            return "";
-        }
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            StringBuilder builder = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                builder.append(line);
-            }
-            return builder.toString();
-        }
-    }
+
 
     private static String requiredApiKey(Context context) {
         String apiKey = Prefs.deepgramApiKey(context);

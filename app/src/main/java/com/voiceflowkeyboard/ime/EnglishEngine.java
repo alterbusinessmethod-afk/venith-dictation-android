@@ -138,7 +138,7 @@ final class EnglishEngine {
             } catch (RuntimeException error) {
                 // A crash on the typing path would take the keyboard down with
                 // it. Losing one keystroke's suggestions is the better failure.
-                Log.e(TAG, "Suggestion pass failed for " + word, error);
+                Log.e(TAG, "Suggestion pass failed: " + error.getClass().getSimpleName());
                 correction = EnglishCorrector.Result.NONE;
                 completions = Collections.emptyList();
             }

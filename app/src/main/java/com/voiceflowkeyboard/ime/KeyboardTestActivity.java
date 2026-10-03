@@ -2,7 +2,6 @@ package com.voiceflowkeyboard.ime;
 
 import android.app.Activity;
 import android.content.Intent;
-import android.graphics.Color;
 import android.os.Bundle;
 import android.text.InputType;
 import android.view.Gravity;
@@ -19,6 +18,7 @@ public class KeyboardTestActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Ui.applyWindow(this);
         setContentView(buildContent());
         testInput.requestFocus();
         testInput.postDelayed(() -> {
@@ -33,12 +33,12 @@ public class KeyboardTestActivity extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         Ui.applySystemBarPadding(root, dp(20), dp(20), dp(20), dp(20));
-        root.setBackgroundColor(Color.rgb(248, 249, 250));
+        root.setBackgroundColor(Ui.BACKGROUND);
 
         TextView title = new TextView(this);
         title.setText("Keyboard Test");
         title.setTextSize(22);
-        title.setTextColor(Color.rgb(31, 35, 40));
+        title.setTextColor(Ui.TEXT);
         title.setGravity(Gravity.START);
         root.addView(title);
 
@@ -77,6 +77,10 @@ public class KeyboardTestActivity extends Activity {
         testInput.setMinLines(5);
         testInput.setGravity(Gravity.TOP | Gravity.START);
         testInput.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_MULTI_LINE | InputType.TYPE_TEXT_FLAG_CAP_SENTENCES);
+        testInput.setTextColor(Ui.TEXT);
+        testInput.setHintTextColor(Ui.MUTED);
+        testInput.setPadding(dp(16), dp(16), dp(16), dp(16));
+        testInput.setBackground(Ui.roundedStroke(this, Ui.SURFACE, 16, Ui.DIVIDER));
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 0,

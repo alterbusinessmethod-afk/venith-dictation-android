@@ -2,10 +2,8 @@ package com.voiceflowkeyboard.ime;
 
 import android.app.Activity;
 import android.content.Context;
-import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.os.Build;
 import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
@@ -13,16 +11,17 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 final class Ui {
-    static final int BACKGROUND = 0xfff4f6f8;
-    static final int SURFACE = 0xffffffff;
-    static final int SURFACE_ALT = 0xffeef2f6;
-    static final int TEXT = 0xff1f2328;
-    static final int MUTED = 0xff667085;
-    static final int DIVIDER = 0xffe5e7eb;
-    static final int ACCENT = 0xff0f766e;
-    static final int ACCENT_SOFT = 0xffd8f3ee;
-    static final int DANGER = 0xffb42318;
-    static final int DANGER_SOFT = 0xffffe4e0;
+    static final int BACKGROUND = 0xff0b111a;
+    static final int SURFACE = 0xff151e29;
+    static final int SURFACE_ALT = 0xff202c38;
+    static final int TEXT = 0xfff4f7f5;
+    static final int MUTED = 0xffb2c0c8;
+    static final int DIVIDER = 0xff344452;
+    static final int ACCENT = 0xff73e0c4;
+    static final int ON_ACCENT = 0xff071e1b;
+    static final int ACCENT_SOFT = 0xff173a37;
+    static final int DANGER = 0xffff9389;
+    static final int DANGER_SOFT = 0xff402421;
 
     private Ui() {
     }
@@ -31,25 +30,21 @@ final class Ui {
         Window window = activity.getWindow();
         window.setStatusBarColor(BACKGROUND);
         window.setNavigationBarColor(BACKGROUND);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            window.getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
-        }
+        window.getDecorView().setSystemUiVisibility(0);
     }
 
     static void applySystemBarPadding(View view, int left, int top, int right, int bottom) {
         view.setPadding(left, top, right, bottom);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT_WATCH) {
-            view.setOnApplyWindowInsetsListener((v, insets) -> {
-                v.setPadding(
-                        left + insets.getSystemWindowInsetLeft(),
-                        top + insets.getSystemWindowInsetTop(),
-                        right + insets.getSystemWindowInsetRight(),
-                        bottom + insets.getSystemWindowInsetBottom()
-                );
-                return insets;
-            });
-            view.requestApplyInsets();
-        }
+        view.setOnApplyWindowInsetsListener((v, insets) -> {
+            v.setPadding(
+                    left + insets.getSystemWindowInsetLeft(),
+                    top + insets.getSystemWindowInsetTop(),
+                    right + insets.getSystemWindowInsetRight(),
+                    bottom + insets.getSystemWindowInsetBottom()
+            );
+            return insets;
+        });
+        view.requestApplyInsets();
     }
 
     static GradientDrawable rounded(Context context, int color, int radiusDp) {
@@ -78,9 +73,9 @@ final class Ui {
     }
 
     static TextView topAction(Context context, String text, boolean primary) {
-        TextView action = text(context, text, 15, true, primary ? Color.WHITE : TEXT);
+        TextView action = text(context, text, 15, true, primary ? ON_ACCENT : TEXT);
         action.setGravity(Gravity.CENTER);
-        action.setMinHeight(dp(context, 40));
+        action.setMinHeight(dp(context, 48));
         action.setPadding(dp(context, primary ? 16 : 10), 0, dp(context, primary ? 16 : 10), 0);
         action.setBackground(rounded(context, primary ? ACCENT : SURFACE_ALT, 20));
         action.setClickable(true);

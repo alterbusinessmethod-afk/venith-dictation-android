@@ -38,8 +38,7 @@ public class SettingsActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Ui.applyWindow(this);
-        requestAudioPermission();
-        setTitle("VoiceFlow Keyboard");
+        setTitle("Venith Dictation");
         setContentView(buildContent());
         created = true;
     }
@@ -65,26 +64,63 @@ public class SettingsActivity extends Activity {
 
         root.addView(header());
 
-        LinearLayout setup = section(root, "Setup");
-        setup.addView(row("API keys", apiKeySummary(), ">", v -> startActivity(new Intent(this, ApiKeysActivity.class))));
+        TextView introduction = text("Private, local English dictation is ready without an account. Add a Claude key on this phone only if you choose cloud cleanup.", 14, false, Ui.MUTED);
+        introduction.setPadding(dp(2), dp(4), dp(2), dp(6));
+        root.addView(introduction);
+
+        LinearLayout guide = section(root, "Start here");
+        guide.addView(row("1. Enable keyboard", "Open Android input settings", ">", v -> startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))));
+        guide.addView(divider());
+        guide.addView(row("2. Choose Venith Dictation", activeKeyboardSummary(), ">", v -> showInputMethodPicker()));
+        guide.addView(divider());
+        guide.addView(row("3. Grant microphone", microphoneSummary(), ">", v -> requestAudioPermission()));
+        guide.addView(divider());
+        guide.addView(row("4. Try local dictation", "Open a safe test field and tap the microphone", ">", v -> startActivity(new Intent(this, KeyboardTestActivity.class))));
+
+        LinearLayout setup = section(root, "Optional connections");
+        setup.addView(row("Provider API keys", apiKeySummary(), ">", v -> startActivity(new Intent(this, ApiKeysActivity.class))));
         setup.addView(divider());
         setup.addView(row("Active keyboard", activeKeyboardSummary(), ">", v -> showInputMethodPicker()));
 
         LinearLayout voice = section(root, "Voice input");
-        voice.addView(row("Voice model", modelSelectionSummary(true), ">", v -> openModelPicker(true)));
+        voice.addView(row("Speech model", modelSelectionSummary(true), ">", v -> openModelPicker(true)));
         voice.addView(divider());
         offlineFallbackValue = rowValue(offlineFallbackSummary());
-        voice.addView(row("Offline fallback", offlineFallbackValue, ">", v -> prepareOfflineFallbackModel()));
+        voice.addView(row("Optional Vosk fallback", offlineFallbackValue, ">", v -> prepareOfflineFallbackModel()));
 
-        LinearLayout transform = section(root, "Text transform");
+        LinearLayout transform = section(root, "Optional cloud cleanup");
         transformEnabledInput = new CheckBox(this);
         transformEnabledInput.setChecked(Prefs.enableTransform(this));
-        transform.addView(checkboxRow("Transform transcript", transformEnabledInput, this::saveCurrentSettings));
+        transform.addView(checkboxDetailRow(
+                "Clean up transcript with Claude",
+                "With local speech selected, audio stays here. Cleanup sends transcript text to your chosen cloud provider.",
+                transformEnabledInput,
+                this::saveCurrentSettings
+        ));
         transform.addView(divider());
-        transform.addView(row("Transform model", modelSelectionSummary(false), ">", v -> openModelPicker(false)));
+        transform.addView(row("Cleanup model", modelSelectionSummary(false), ">", v -> openModelPicker(false)));
         transform.addView(divider());
         activeProfileValue = rowValue(Prefs.displayLabelForPreset(this, selectedPreset));
         transform.addView(row("Default voice style", activeProfileValue, ">", v -> showProfileDialog()));
+
+        LinearLayout privacy = section(root, "Context and privacy");
+        CheckBox autoContextInput = new CheckBox(this);
+        autoContextInput.setChecked(Prefs.automaticContext(this));
+        privacy.addView(checkboxDetailRow(
+                "Switch style by app",
+                "Choose AI Prompt in ChatGPT or Claude, while keeping manual style selection available on the keyboard.",
+                autoContextInput,
+                () -> Prefs.setAutomaticContext(this, autoContextInput.isChecked())
+        ));
+        privacy.addView(divider());
+        CheckBox historyInput = new CheckBox(this);
+        historyInput.setChecked(Prefs.historyEnabled(this));
+        privacy.addView(checkboxDetailRow(
+                "Save transcript history",
+                "Off by default. When on, raw and cleaned transcripts are saved on this device.",
+                historyInput,
+                () -> Prefs.setHistoryEnabled(this, historyInput.isChecked())
+        ));
 
         LinearLayout translation = section(root, "Translation");
         translationEnabledInput = new CheckBox(this);
@@ -154,6 +190,8 @@ public class SettingsActivity extends Activity {
         advanced.addView(row("Keyboard test", "Open test field", ">", v -> startActivity(new Intent(this, KeyboardTestActivity.class))));
         advanced.addView(divider());
         advanced.addView(row("Android keyboard settings", "System settings", ">", v -> startActivity(new Intent(Settings.ACTION_INPUT_METHOD_SETTINGS))));
+        advanced.addView(divider());
+        advanced.addView(row("About and licences", "Original source, model and third-party notices", ">", v -> startActivity(new Intent(this, AboutActivity.class))));
 
         return scroll;
     }
@@ -163,7 +201,7 @@ public class SettingsActivity extends Activity {
         header.setOrientation(LinearLayout.VERTICAL);
         header.setPadding(0, 0, 0, dp(8));
 
-        TextView title = text("VoiceFlow Keyboard", 26, true, Ui.TEXT);
+        TextView title = text("Venith Dictation", 26, true, Ui.TEXT);
         title.setIncludeFontPadding(false);
         header.addView(title);
 
@@ -183,21 +221,42 @@ public class SettingsActivity extends Activity {
     }
 
     private String setupStatus() {
-        if (!Prefs.hasApiKeyForProvider(this, Prefs.transcriptionProvider(this))) {
-            return Prefs.providerLabel(Prefs.transcriptionProvider(this)) + " key needed for voice input";
-        }
-        if (Prefs.enableTransform(this) && !Prefs.hasApiKeyForProvider(this, Prefs.transformProvider(this))) {
-            return Prefs.providerLabel(Prefs.transformProvider(this)) + " key needed for transform";
-        }
         if (!isVoiceFlowActive()) {
-            return "Keyboard installed, not active";
+            return "Enable and choose the keyboard";
         }
-        return "Ready";
+        if (!hasAudioPermission()) {
+            return "Grant microphone to dictate";
+        }
+        try {
+            if (!Prefs.hasApiKeyForProvider(this, Prefs.transcriptionProvider(this))) {
+                return Prefs.providerLabel(Prefs.transcriptionProvider(this)) + " key needed for cloud speech";
+            }
+            if (Prefs.enableTransform(this) && !Prefs.hasApiKeyForProvider(this, Prefs.transformProvider(this))) {
+                return "Add your cleanup provider key";
+            }
+        } catch (IllegalStateException e) {
+            return "Key storage unavailable; open API keys";
+        }
+        return "Ready to dictate";
     }
 
     private boolean isProviderSetupReady() {
-        return Prefs.hasApiKeyForProvider(this, Prefs.transcriptionProvider(this))
-                && (!Prefs.enableTransform(this) || Prefs.hasApiKeyForProvider(this, Prefs.transformProvider(this)));
+        try {
+            return isVoiceFlowActive() && hasAudioPermission()
+                    && Prefs.hasApiKeyForProvider(this, Prefs.transcriptionProvider(this))
+                    && (!Prefs.enableTransform(this) || Prefs.hasApiKeyForProvider(this, Prefs.transformProvider(this)));
+        } catch (IllegalStateException e) {
+            return false;
+        }
+    }
+
+    private boolean hasAudioPermission() {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                || checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private String microphoneSummary() {
+        return hasAudioPermission() ? "Permission granted" : "Tap to allow voice recording";
     }
 
     private LinearLayout section(LinearLayout root, String title) {
@@ -223,6 +282,12 @@ public class SettingsActivity extends Activity {
     private String modelSelectionSummary(boolean transcription) {
         String provider = transcription ? Prefs.transcriptionProvider(this) : Prefs.transformProvider(this);
         String model = transcription ? Prefs.transcriptionModel(this) : Prefs.transformModel(this);
+        if (transcription && Prefs.PROVIDER_OFFLINE_ZIPFORMER.equals(provider)) {
+            return "Bundled Zipformer English · on-device";
+        }
+        if (!transcription && Prefs.PROVIDER_ANTHROPIC.equals(provider) && "claude-sonnet-4-6".equals(model)) {
+            return "Claude Sonnet 4.6";
+        }
         return Prefs.providerLabel(provider) + " - " + model;
     }
 
@@ -236,6 +301,7 @@ public class SettingsActivity extends Activity {
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setMinimumHeight(dp(60));
         row.setPadding(dp(14), dp(8), dp(10), dp(8));
+        row.setContentDescription(title + ". " + valueView.getText());
         row.setBackgroundColor(Color.TRANSPARENT);
         row.setClickable(listener != null);
         if (listener != null) {
@@ -305,6 +371,7 @@ public class SettingsActivity extends Activity {
         TextView titleView = text(title, 16, true, Ui.TEXT);
         row.addView(titleView, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         checkBox.setButtonTintList(android.content.res.ColorStateList.valueOf(Ui.ACCENT));
+        checkBox.setContentDescription(title);
         checkBox.setOnClickListener(v -> onChanged.run());
         row.addView(checkBox);
         return row;
@@ -340,6 +407,7 @@ public class SettingsActivity extends Activity {
         ));
 
         checkBox.setButtonTintList(android.content.res.ColorStateList.valueOf(Ui.ACCENT));
+        checkBox.setContentDescription(title);
         checkBox.setOnClickListener(v -> onChanged.run());
         row.addView(checkBox);
         return row;
@@ -427,16 +495,9 @@ public class SettingsActivity extends Activity {
     }
 
     private void saveCurrentSettings() {
-        Prefs.save(
-                this,
-                Prefs.openAiApiKey(this),
-                Prefs.transcriptionProvider(this),
-                Prefs.transformProvider(this),
-                Prefs.transcriptionModel(this),
-                Prefs.transformModel(this),
-                transformEnabledInput.isChecked(),
-                selectedPreset
-        );
+        Prefs.setEnableTransform(this, transformEnabledInput.isChecked());
+        Prefs.setActivePreset(this, selectedPreset);
+        setContentView(buildContent());
     }
 
     private void openPrompt(String id) {
@@ -460,14 +521,12 @@ public class SettingsActivity extends Activity {
     }
 
     private String apiKeySummary() {
-        int count = Prefs.savedApiKeyCount(this);
-        if (count == 0) {
-            return "OpenAI not set";
+        try {
+            int count = Prefs.savedApiKeyCount(this);
+            return count == 0 ? "Optional. Add private keys on this phone" : count + " saved on this phone";
+        } catch (IllegalStateException e) {
+            return "Key storage unavailable. Tap to repair";
         }
-        if (count == 1 && Prefs.hasOpenAiApiKey(this)) {
-            return "OpenAI connected";
-        }
-        return count + " keys saved";
     }
 
     private String replacementSummary() {
@@ -476,17 +535,14 @@ public class SettingsActivity extends Activity {
     }
 
     private String offlineFallbackSummary() {
-        if (OfflineParakeetClient.isModelReady(this)) {
-            return "Parakeet ready";
-        }
         if (OfflineVoskClient.isModelReady(this)) {
             return "Vosk ready";
         }
-        return downloadingOfflineModel ? "Downloading..." : "Download compact fallback";
+        return downloadingOfflineModel ? "Downloading Vosk..." : "Optional extra download";
     }
 
     private void prepareOfflineFallbackModel() {
-        if (OfflineParakeetClient.isModelReady(this) || OfflineVoskClient.isModelReady(this)) {
+        if (OfflineVoskClient.isModelReady(this)) {
             Toast.makeText(this, offlineFallbackSummary(), Toast.LENGTH_SHORT).show();
             return;
         }
@@ -521,16 +577,17 @@ public class SettingsActivity extends Activity {
                             .show();
                 });
             }
-        }, "VoiceFlowOfflineModelDownload").start();
+        }, "VenithVoskDownload").start();
     }
 
     private String activeKeyboardSummary() {
-        return isVoiceFlowActive() ? "VoiceFlow" : "Choose keyboard";
+        return isVoiceFlowActive() ? "Venith Dictation selected" : "Choose keyboard";
     }
 
     private boolean isVoiceFlowActive() {
         String current = Settings.Secure.getString(getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD);
-        return current != null && current.contains("com.voiceflowkeyboard.ime/.VoiceFlowKeyboardService");
+        return current != null && current.startsWith(getPackageName() + "/")
+                && current.contains("VoiceFlowKeyboardService");
     }
 
     private void showInputMethodPicker() {
@@ -569,6 +626,14 @@ public class SettingsActivity extends Activity {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
                 && checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
             requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 10);
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == 10 && created) {
+            setContentView(buildContent());
         }
     }
 

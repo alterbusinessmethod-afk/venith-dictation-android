@@ -1,6 +1,7 @@
 package com.voiceflowkeyboard.ime;
 
 import android.app.Activity;
+import android.app.AlertDialog;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.text.InputType;
@@ -19,11 +20,13 @@ public class ApiKeysActivity extends Activity {
     private EditText xAiInput;
     private EditText deepgramInput;
     private ScrollView scroll;
+    private boolean keyStorageAvailable = true;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Ui.applyWindow(this);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_SECURE);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING);
         setTitle("API keys");
         setContentView(buildContent());
@@ -33,6 +36,8 @@ public class ApiKeysActivity extends Activity {
         LinearLayout screen = new LinearLayout(this);
         screen.setOrientation(LinearLayout.VERTICAL);
         screen.setBackgroundColor(Ui.BACKGROUND);
+        screen.setSaveEnabled(false);
+        screen.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO_EXCLUDE_DESCENDANTS);
 
         screen.addView(topBar());
 
@@ -49,29 +54,44 @@ public class ApiKeysActivity extends Activity {
                 1f
         ));
 
-        TextView note = Ui.text(this, "Add provider keys here first. VoiceFlow only enables provider features after the key is saved.", 14, false, Ui.MUTED);
+        TextView note = Ui.text(this,
+                "Keys stay on this phone. Local dictation needs no key. Add Claude only if you enable cloud cleanup. Clear a field and Save to remove that key.",
+                14, false, Ui.MUTED);
         note.setPadding(0, 0, 0, dp(8));
         root.addView(note);
 
         LinearLayout providers = section(root, "Providers");
         openAiInput = keyInput("OpenAI API key");
-        openAiInput.setText(Prefs.openAiApiKey(this));
         providers.addView(field("OpenAI", "Transcription and transform", openAiInput));
         providers.addView(divider());
 
         anthropicInput = keyInput("Anthropic API key");
-        anthropicInput.setText(Prefs.anthropicApiKey(this));
         providers.addView(field("Claude", "Transform only", anthropicInput));
         providers.addView(divider());
 
         xAiInput = keyInput("xAI API key");
-        xAiInput.setText(Prefs.xAiApiKey(this));
         providers.addView(field("Grok / xAI", "Transcription and transform", xAiInput));
         providers.addView(divider());
 
         deepgramInput = keyInput("Deepgram API key");
-        deepgramInput.setText(Prefs.deepgramApiKey(this));
         providers.addView(field("Deepgram", "Transcription only", deepgramInput));
+        try {
+            openAiInput.setText(Prefs.openAiApiKey(this));
+            anthropicInput.setText(Prefs.anthropicApiKey(this));
+            xAiInput.setText(Prefs.xAiApiKey(this));
+            deepgramInput.setText(Prefs.deepgramApiKey(this));
+        } catch (IllegalStateException e) {
+            keyStorageAvailable = false;
+            openAiInput.setText("");
+            anthropicInput.setText("");
+            xAiInput.setText("");
+            deepgramInput.setText("");
+            note.setText("Saved keys cannot be read. Nothing has changed. You can clear the stored keys after confirmation, then enter new ones.");
+            TextView clearUnreadable = Ui.topAction(this, "Clear unreadable keys", false);
+            clearUnreadable.setContentDescription("Clear unreadable stored API keys");
+            clearUnreadable.setOnClickListener(v -> confirmClearUnreadableKeys());
+            root.addView(clearUnreadable, 1);
+        }
         return screen;
     }
 
@@ -145,6 +165,9 @@ public class ApiKeysActivity extends Activity {
         input.setPadding(0, dp(10), 0, dp(4));
         input.setBackgroundColor(0x00000000);
         input.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_PASSWORD | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        input.setSaveEnabled(false);
+        input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        input.setAutofillHints((String[]) null);
         return input;
     }
 
@@ -172,15 +195,49 @@ public class ApiKeysActivity extends Activity {
     }
 
     private void saveKeys() {
-        Prefs.saveApiKeys(
-                this,
-                openAiInput.getText().toString(),
-                anthropicInput.getText().toString(),
-                xAiInput.getText().toString(),
-                deepgramInput.getText().toString()
-        );
-        Toast.makeText(this, "API keys saved", Toast.LENGTH_SHORT).show();
-        finish();
+        if (!keyStorageAvailable) {
+            showStorageError();
+            return;
+        }
+        try {
+            Prefs.saveApiKeys(
+                    this,
+                    openAiInput.getText().toString(),
+                    anthropicInput.getText().toString(),
+                    xAiInput.getText().toString(),
+                    deepgramInput.getText().toString()
+            );
+            Toast.makeText(this, "API keys saved on this phone", Toast.LENGTH_SHORT).show();
+            finish();
+        } catch (IllegalStateException e) {
+            showStorageError();
+        }
+    }
+
+    private void confirmClearUnreadableKeys() {
+        new AlertDialog.Builder(this)
+                .setTitle("Clear unreadable keys?")
+                .setMessage("This removes all stored provider API keys from this phone. You will need to enter any keys you still use again. Continue?")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Clear keys", (dialog, which) -> {
+                    try {
+                        Prefs.saveApiKeys(this, "", "", "", "");
+                        keyStorageAvailable = true;
+                        setContentView(buildContent());
+                        Toast.makeText(this, "Stored API keys cleared", Toast.LENGTH_SHORT).show();
+                    } catch (IllegalStateException e) {
+                        showStorageError();
+                    }
+                })
+                .show();
+    }
+
+    private void showStorageError() {
+        new AlertDialog.Builder(this)
+                .setTitle("Key storage unavailable")
+                .setMessage("Keys were not changed. Please unlock your device and try again.")
+                .setPositiveButton("OK", null)
+                .show();
     }
 
     private View divider() {

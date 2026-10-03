@@ -1,7 +1,11 @@
 <resources>
-    <color name="keyboard_bg">#F1F3F4</color>
-    <color name="keyboard_key">#FFFFFF</color>
-    <color name="keyboard_key_dark">#D7DCE1</color>
-    <color name="keyboard_text">#1F2328</color>
-    <color name="accent">#1565C0</color>
+    <color name="screen_background">#0B111A</color>
+    <color name="screen_surface">#151E29</color>
+    <color name="text_primary">#F4F7F5</color>
+    <color name="text_muted">#B2C0C8</color>
+    <color name="keyboard_bg">#0B111A</color>
+    <color name="keyboard_key">#202C38</color>
+    <color name="keyboard_key_dark">#344452</color>
+    <color name="keyboard_text">#F4F7F5</color>
+    <color name="accent">#73E0C4</color>
 </resources>

@@ -1,273 +1,49 @@
-# VoiceFlow Keyboard
+# Venith Dictation for Android
 
-Open-source Android voice keyboard for people who want a Typeless-style mobile dictation workflow, AI dictation cleanup, and bring-your-own-key voice-to-text on any Android phone.
+A dark Android keyboard with bundled, offline English dictation and optional conservative text cleanup through your own Claude API key. Designed as a separately installed ARM64 app for phones such as the Samsung S22 Ultra.
 
-Record a voice note from the keyboard, transcribe it, optionally clean it with an LLM prompt, and insert the final text into any app. VoiceFlow Keyboard is a native Android IME, so it works anywhere a normal keyboard works: chat apps, email, notes, search, docs, forms, and coding tools.
+This is a credited MIT fork of [yutungh/voiceflow-keyboard-android](https://github.com/yutungh/voiceflow-keyboard-android), based on commit `231899b4bf685a1f37df11ac858189c6bcd136c5`. The original README and disabled upstream workflow examples are preserved in [docs/upstream-reference](docs/upstream-reference). Original copyright and third-party licenses remain intact.
 
-> Not affiliated with Typeless, Voiceflow, Apple, Google, Anthropic, or OpenAI. "Typeless-style" is used only to describe the product category: voice-first mobile typing with AI cleanup.
+## Install
 
-## Screenshots
+Download the APK or installation ZIP from this repository's Releases page when the verified preview release is available. The ZIP is a container: extract it, then tap the `.apk` on your phone. The English speech model is inside the APK; no separate model download or speech account is required.
 
-![VoiceFlow Keyboard letters layout](docs/keyboard-letters.png)
+Follow [the Samsung setup guide](docs/INSTALL_SAMSUNG.md). The preview does not replace the original VoiceFlow app: its application ID is `com.venith.dictation`.
 
-![VoiceFlow Keyboard symbols layout](docs/keyboard-symbols.png)
+## What changes
 
-![VoiceFlow Keyboard settings](docs/settings-v046.png)
+- Dark settings, keyboard, dialogs and prompt editor.
+- English Zipformer GigaSpeech int8 bundled locally: **75,208,256 bytes of inference files** with pinned hashes. Two CPU threads, on-demand recognition and resource release after dictation.
+- Automatic AI Prompt style in the ChatGPT and Claude apps; Email style in supported mail apps/email fields; manual style selection elsewhere.
+- Editable AI Prompt, Email, Casual, Professional and relationship styles. Automatic context can be switched off to keep manual control.
+- Claude Sonnet 4.6 as the default cleanup model. Cleanup starts off and requires your own key plus explicit enablement.
+- Conservative cleanup instructions and value/negation checks; raw transcript recovery on cleanup errors or suspicious changes.
+- Android Keystore encryption for provider keys, disabled backup/cleartext traffic, sensitive-field suppression and history off by default.
+- Session guards that prevent pending results from automatically being inserted after an editor changes.
 
-![VoiceFlow Keyboard voice model picker](docs/voice-picker-v046.png)
+Browser page URLs are not visible to a normal keyboard. Select AI Prompt manually when using ChatGPT or Claude in a browser. No Accessibility service or broad app inventory is used.
 
-![VoiceFlow Keyboard Offline Parakeet model details](docs/parakeet-v046.png)
+## Model and verification limits
 
-## Try It
+Model file size is not peak RAM. No S22 Ultra RAM, microphone, battery, latency or real-key Claude benchmark is claimed without a phone test. English is the bundled language. Optional Vosk/Parakeet choices remain available but require their own downloads and have different resource costs. See [model choices](docs/MODEL_CHOICES.md).
 
-Download the latest prototype APK from the [GitHub Releases page](https://github.com/yutungh/voiceflow-keyboard-android/releases/latest). Open the latest release, download the `voiceflow-keyboard-...-debug.apk` asset, then install it on your Android phone.
+The model runs when you dictate; the recognizer is released afterward. This keyboard does not keep an always-listening background microphone. Recording has a 120-second limit. Provider cleanup sends recognized text to the selected provider; choosing a cloud speech provider separately can send audio too. Keep the bundled local speech model selected for local audio processing.
 
-This is a debug-signed prototype build for sideloading and testing. For production use, build and sign your own release APK.
+## Build from source
 
-Release APKs are built by GitHub Actions from the public repository. They do not include `.env.local` and do not bundle any API keys.
+Use JDK 17, Android SDK platform 35/build-tools 35.0.0, Python 3 and the checked-in Gradle wrapper. Its distribution and wrapper JAR are verified against official Gradle hashes. Run:
 
-## Why This Exists
-
-Most mobile voice typing tools either insert raw dictation immediately or live inside one app. This project is a base for an Android keyboard that can:
-
-- capture a full recording instead of live-inserting partial text,
-- transcribe the recording,
-- rewrite or lightly clean the transcript with a configurable prompt,
-- insert the final result into the active text field,
-- let users bring their own API key and model choices.
-
-Good search terms for this project: Android voice keyboard, VoiceFlow Keyboard, Typeless alternative for Android, AI dictation keyboard, AI voice keyboard, OpenAI transcription keyboard, Grok transcription keyboard, Claude cleanup keyboard, offline voice typing Android, Parakeet offline transcription Android, Vosk offline keyboard, voice-to-text IME, prompt-based dictation cleanup, bring your own API key keyboard.
-
-## Features
-
-- Native Android input method service.
-- Apple-inspired key layout and spacing.
-- Permanent microphone button above the keys.
-- Whole-clip recording: record first, transcribe after stop, then insert.
-- OpenAI audio transcription via `/v1/audio/transcriptions`.
-- Grok/xAI speech-to-text and transform support.
-- Claude/Anthropic transform support.
-- Deepgram speech-to-text support.
-- Optional local offline transcription with compact Vosk or high-accuracy Parakeet via sherpa-onnx.
-- Automatic offline transcription fallback when a cloud voice provider is selected but the phone has no validated internet connection.
-- Settings control to download the compact offline fallback model before you need it.
-- Optional transcript cleanup via configurable cloud transform providers.
-- Editable API keys, providers, transcription models, transform models, and voice styles.
-- Combined provider/model pickers for voice input and text transform setup.
-- Voice styles: Friends, Work, and Family by default, an optional Partner template, editable custom styles, optional emoji icons, and a collapsed Fun group with Haiku, Pirate, Shakespearean, Noir Detective, and Wizard personas.
-- A mutually exclusive style picker replaces the disabled keys while dictation or translation is recording.
-- A five-step expression control (`Reserved` through `Expressive`) adjusts conversational energy, punctuation, and permitted emoji use independently for each voice style.
-- Voice styles apply to both transcript cleanup and natural target-language localization; voice instruction mode remains independent.
-- Friends and Work automatically use bullets or numbering when the transcript is clearly a list, steps, tasks, instructions, options, or grouped items.
-- Translation history remembers the target language and generated style variants for comparison or reuse.
-- Retone can regenerate the last inserted dictation or translation from its original transcript, safely replace it when the field is unchanged, and keep alternate style/expression versions together in history.
-- Low-latency GPT-5 transform settings with safe fallback retry.
-- Non-destructive English spelling and completion suggestions; spelling candidates are never applied unless the user taps one.
-- Personal vocabulary supports multiple likely mishearings, an exact output, and optional context for names, nicknames, jargon, and commands.
-- GPT Transcribe receives personal exact spellings as keyword hints, while a provider-independent local correction guarantees configured output such as `N P M run sign off` -> `npm run signoff`.
-- Built-in phrase replacement example: `Cloud Code` -> `Claude Code`.
-- Smart spacing for voice inserts.
-- Every new input target and keyboard window opens on the standard letters layout—even when Android reuses the same keyboard view across app switches—with a default-on safety setting that cancels and discards active recordings when the keyboard closes or the input app changes.
-- Active cellular and VoIP calls are detected before recording so Android's microphone restriction is explained instead of silently producing an empty transcript.
-- Compact recording and retone statuses use adaptive sizing and marquee overflow so the full state remains readable.
-- Short voice outputs under 5 words do not get a forced trailing period.
-- Haptics for keyboard taps.
-- Symbols and expanded symbols views.
-
-## Current Status
-
-This is a working prototype and a base for other developers, not a finished consumer keyboard.
-
-Known tradeoffs:
-
-- API keys are stored locally in app preferences. For production, migrate to encrypted storage.
-- Audio is sent to the configured transcription provider when using OpenAI transcription.
-- Realtime streaming transcription is not implemented yet. Cloud transcription records the full clip and uploads after stop.
-- Offline Vosk transcription downloads a compact local model on first use and runs the transcription on-device after recording stops.
-- Offline Parakeet downloads a much larger local model, about 600 MB, on first use. It is intended as the higher-accuracy offline English option.
-- Offline fallback uses an installed Parakeet model first, then an installed Vosk model. Use Settings > Voice input > Offline fallback to prepare the compact Vosk fallback before you need it.
-- English spelling suggestions are context-free and much simpler than Gboard or Apple Keyboard, so they are never applied automatically.
-- The UI is tuned for a modern Samsung/Android phone but is not exhaustively tested across devices.
-
-## Build
-
-Requirements:
-
-- Android Studio or Android SDK
-- JDK 17+
-
-Build the debug APK:
-
-```powershell
-.\gradlew.bat assembleDebug
+```sh
+python3 scripts/prepare_model.py
+./gradlew --no-daemon :app:testDebugUnitTest :app:assembleRelease
 ```
 
-On macOS/Linux:
+The release output is unsigned unless `VENITH_SIGNING_STORE` and `VENITH_SIGNING_PASSWORD` point to your own signing key (alias `venith-dictation`). Keep that private key outside source control. Debug builds also support x86_64 for emulator verification; the release is ARM64.
 
-```bash
-./gradlew assembleDebug
-```
+The pinned GitHub workflow compiles, runs unit tests, and exercises the native bundled model plus dark screens on an Android emulator. The public LibriSpeech fixture is downloaded only for the test APK. No provider key or paid AI call is used by the tests. An emulator receipt is separate from phone performance.
 
-Output:
+## Credits
 
-```text
-app/build/outputs/apk/debug/app-debug.apk
-```
+VoiceFlow Keyboard: yutungh, MIT. Sherpa-ONNX/Zipformer: k2-fsa, Apache 2.0; model revision `c9e185789e2067cbf79350c7f691d5d2d4c5a28a`. Vosk: Alpha Cephei, Apache 2.0. Other dependency and model notices are in [the bundled license directory](app/src/main/assets/licenses). The test-only LibriSpeech clip is CC BY 4.0, credited to Vassil Panayotov, Guoguo Chen, Daniel Povey and Sanjeev Khudanpur via [OpenSLR 12](https://www.openslr.org/12).
 
-## Install On A Phone
-
-Enable Developer Options and USB Debugging on your Android phone. On Samsung devices, you may also need to disable Auto Blocker for sideloading.
-
-If you downloaded an APK from Releases, install that APK:
-
-1. Go to [Releases](https://github.com/yutungh/voiceflow-keyboard-android/releases/latest).
-2. Download the APK asset named like `voiceflow-keyboard-vX.Y.Z-debug.apk`.
-3. On your phone, open the APK and allow install from that source if Android asks.
-4. Open **VoiceFlow Keyboard** from the app drawer.
-
-If you built from source, install the generated debug APK:
-
-Install:
-
-```powershell
-adb install -r app/build/outputs/apk/debug/app-debug.apk
-```
-
-Then:
-
-1. Open **VoiceFlow Keyboard**.
-2. Grant microphone permission.
-3. Add your provider API keys if using cloud transcription or cleanup.
-4. Choose your voice input model and transform model.
-5. Open Android keyboard settings and enable **VoiceFlow Keyboard**.
-6. Choose it from the keyboard picker.
-
-## Private Local Install
-
-For a personal phone build, you can keep API keys in an ignored `.env.local` file and seed them into the installed app preferences after install:
-
-```powershell
-.\gradlew.bat assembleDebug
-.\scripts\install-private.ps1 -Serial YOUR_DEVICE_SERIAL
-```
-
-Supported local key names:
-
-```text
-OpenAIAPIKey=...
-AnthropicAPIKey=...
-XAIAPIKey=...
-DeepgramAPIKey=...
-```
-
-Personal installations can also use an ignored `.voiceflow-private.json` file to preserve private vocabulary without committing it:
-
-```json
-{
-  "replacements": [
-    {
-      "from": "likely mishearing\nanother mishearing",
-      "to": "ExactSpelling",
-      "context": "Optional private context for GPT Transcribe."
-    }
-  ]
-}
-```
-
-The private installer merges entries by exact-output name, so rerunning it updates those private terms without removing unrelated replacements added in Settings.
-
-This script does not compile keys into the APK. It installs the local debug APK, then writes the keys directly into the connected device's private app preferences with `adb run-as`.
-
-## Recommended Model Setup
-
-The default OpenAI flow is:
-
-- transcription: `gpt-transcribe`
-- transform: a GPT-5 model
-
-The transform request uses low-latency options for GPT-5-style cleanup tasks:
-
-- `reasoning.effort: none`
-- `text.verbosity: low`
-- prompt caching key/retention
-- fallback retry without optional latency fields if a selected model rejects them
-
-Provider support:
-
-- OpenAI: transcription and transform.
-- Grok / xAI: transcription and transform.
-- Claude / Anthropic: transform only.
-- Deepgram: transcription only.
-- Offline Parakeet: transcription only, high-accuracy English transcription through sherpa-onnx, with a large local model downloaded on first use.
-- Offline Vosk: transcription only, compact local fallback model downloaded on first use.
-- Offline fallback: when OpenAI, Grok / xAI, or Deepgram is selected for voice input and the phone has no validated internet connection, VoiceFlow records with installed Offline Parakeet first, then installed Offline Vosk.
-
-## Voice Styles
-
-The default public styles are **Friends**, **Work**, and **Family**.
-
-**Friends** lightly cleans raw speech-to-text while preserving wording, tone, intent, hedging, slang, and order. **Work** rewrites the transcript into concise, send-ready professional text while preserving meaning, certainty, boundaries, and factual content. **Family** uses familiar, supportive everyday language that is warmer than Friends but less intimate than Partner, without inventing affection or softening serious content.
-
-The optional **Partner** template adds recipient-aware intimacy without inventing nicknames, facts, or emotions. Partner can permit a fitting affectionate emoji when the message itself supports it.
-
-The keyboard places five novelty personas in a collapsed **Fun** group at the far right of the horizontally scrollable style row. **Haiku** returns only a three-line poem; **Pirate**, **Shakespearean**, **Noir Detective**, and **Wizard** restate the message in an unmistakable persona while preserving facts and avoiding invented story details.
-
-While normal dictation or translation is recording, the disabled keyboard is covered by a single-select voice-style panel. The selected style can be changed before stopping and is applied in the same transform request, so it does not add another processing step. Voice instruction mode is excluded.
-
-Built-in styles can format content as bullets or numbered steps when that structure naturally fits. For example, grocery lists, task lists, instructions, recipes, options, and step-by-step workflows do not need a separate Bullets mode.
-
-You can add editable custom styles. Each style has:
-
-- editable display name,
-- editable dictation behavior,
-- editable translation tone guidance,
-- the same one-tap recording flow as the built-in profiles.
-
-This makes the project useful as a base for:
-
-- personal dictation cleanup,
-- professional message drafting,
-- task and instruction formatting,
-- domain-specific terminology cleanup.
-
-## Privacy Notes
-
-This keyboard can read what you type and can record microphone audio while active, because that is how Android keyboards and dictation tools work.
-
-Read [PRIVACY.md](PRIVACY.md) before using or modifying this app.
-
-Current privacy model:
-
-- The app does not include a bundled API key.
-- Users bring their own provider API keys.
-- API keys are saved locally on the device in app preferences.
-- When a cloud transcription provider is enabled, recorded audio is sent to that provider after recording stops.
-- With compatible OpenAI transcription models, configured personal vocabulary spellings and context are sent with the recording as transcription hints.
-- When transcript cleanup is enabled, transcript text is sent to the configured transform provider.
-- Offline Vosk and Offline Parakeet transcription keep audio local after the selected local model has been downloaded.
-
-For a production release, you should:
-
-- use encrypted preferences or Android Keystore for API keys,
-- disable voice/network features in password, OTP, payment, and other sensitive fields,
-- publish a clear privacy policy,
-- avoid collecting logs that contain dictated text,
-- consider a provider abstraction so users can choose local or cloud transcription.
-
-## Roadmap Ideas
-
-- Optional voice-style-specific vocabulary scopes.
-- Encrypted API key storage.
-- Undo last voice insert.
-- Per-field safety rules.
-- Better tablet/foldable layouts.
-- More local transcription model options.
-- Release builds and signing instructions.
-
-## Contributing
-
-Issues and pull requests are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md).
-
-## License
-
-MIT. See [LICENSE](LICENSE).
+Venith changes are MIT licensed. Review the release verification report and checksum manifest before installing a preview.

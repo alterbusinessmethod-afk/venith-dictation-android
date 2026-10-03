@@ -35,14 +35,14 @@ final class TransformClient {
     }
 
     static String transform(Context context, String transcript, String preset, int expression) throws Exception {
-        String provider = Prefs.transformProvider(context);
-        if (Prefs.PROVIDER_ANTHROPIC.equals(provider)) {
-            return AnthropicClient.transform(context, transcript, preset, expression);
-        }
-        if (Prefs.PROVIDER_XAI.equals(provider)) {
-            return XAiClient.transform(context, transcript, preset, expression);
-        }
-        return OpenAiClient.transform(context, transcript, preset, expression);
+        if(!Prefs.enableTransform(context)) throw new IllegalStateException("Cloud cleanup is disabled");
+        if(transcript==null || transcript.length()>CaptureLimits.MAX_TEXT_CHARS) throw new IllegalStateException("Text exceeds cleanup limit");
+        String provider=Prefs.transformProvider(context);
+        String result;
+        if(Prefs.PROVIDER_ANTHROPIC.equals(provider)) result=AnthropicClient.transform(context,transcript,preset,expression);
+        else if(Prefs.PROVIDER_XAI.equals(provider)) result=XAiClient.transform(context,transcript,preset,expression);
+        else result=OpenAiClient.transform(context,transcript,preset,expression);
+        return CleanupSafety.requirePreserved(transcript,result);
     }
 
     static String applyInstruction(Context context, String sourceText, String instruction) throws Exception {

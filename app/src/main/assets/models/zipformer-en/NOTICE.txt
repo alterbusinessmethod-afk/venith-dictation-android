@@ -1,0 +1,6 @@
+Zipformer GigaSpeech English ASR model
+Model source: k2-fsa/sherpa-onnx-zipformer-gigaspeech-2023-12-12
+Pinned model commit: c9e185789e2067cbf79350c7f691d5d2d4c5a28a
+Model repository metadata declares Apache-2.0.
+Repackaged by Venith for Run-314: selected int8 encoder and joiner, original fp32 decoder, tokens; no weights altered.
+Runtime: sherpa-onnx (k2-fsa), Apache-2.0; preserve its own bundled notices.

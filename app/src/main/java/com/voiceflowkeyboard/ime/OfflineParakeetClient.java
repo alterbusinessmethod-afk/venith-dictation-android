@@ -36,23 +36,30 @@ final class OfflineParakeetClient {
 
     static boolean isModelReady(Context context) {
         File dir = modelDir(context);
-        return new File(dir, "encoder.int8.onnx").isFile()
+        return OptionalModelIntegrity.ready(dir) && new File(dir, "encoder.int8.onnx").isFile()
                 && new File(dir, "decoder.int8.onnx").isFile()
                 && new File(dir, "joiner.int8.onnx").isFile()
                 && new File(dir, "tokens.txt").isFile();
     }
 
     static void ensureModel(Context context) throws IOException {
-        if (isModelReady(context)) {
-            return;
-        }
+        if (isModelReady(context) && OptionalModelIntegrity.verify(modelDir(context))) return;
         File root = modelRoot(context);
         if (!root.exists() && !root.mkdirs()) {
             throw new IOException("Could not create Parakeet model directory.");
         }
         File archive = new File(context.getCacheDir(), MODEL_ID + ".tar.bz2");
         download(MODEL_URL, archive);
-        extractTarBz2(archive, root);
+        File stage=new File(root,"staging-"+java.util.UUID.randomUUID());
+        if(!stage.mkdir()) throw new IOException("Could not stage optional model");
+        extractTarBz2(archive, stage);
+        File staged=new File(stage,MODEL_ID);
+        for(String name:new String[]{"encoder.int8.onnx","decoder.int8.onnx","joiner.int8.onnx","tokens.txt"})
+            if(!new File(staged,name).isFile() || new File(staged,name).length()==0) throw new IOException("Incomplete optional model");
+        OptionalModelIntegrity.record(staged);
+        File target=modelDir(context);
+        if(target.exists() && !target.renameTo(new File(root,"invalid-"+java.util.UUID.randomUUID()))) throw new IOException("Could not preserve model");
+        if(!staged.renameTo(target)) throw new IOException("Could not activate optional model");
         if (!archive.delete()) {
             archive.deleteOnExit();
         }
@@ -62,6 +69,7 @@ final class OfflineParakeetClient {
     }
 
     static String transcribePcm(Context context, File pcmFile) throws Exception {
+        if(pcmFile.length()>CaptureLimits.MAX_PCM_BYTES) throw new IOException("Recording too long");
         ensureModel(context);
         OfflineRecognizer recognizer = null;
         OfflineStream stream = null;
@@ -108,7 +116,7 @@ final class OfflineParakeetClient {
         modelConfig.setTransducer(transducer);
         modelConfig.setTokens(new File(dir, "tokens.txt").getAbsolutePath());
         modelConfig.setModelType("nemo_transducer");
-        modelConfig.setNumThreads(Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors() / 2)));
+        modelConfig.setNumThreads(2);
         modelConfig.setDebug(false);
 
         OfflineRecognizerConfig config = new OfflineRecognizerConfig();
@@ -118,12 +126,13 @@ final class OfflineParakeetClient {
         return config;
     }
 
-    private static void acceptPcm(OfflineStream stream, File pcmFile) throws IOException {
+    static void acceptPcm(OfflineStream stream, File pcmFile) throws IOException {
         byte[] buffer = new byte[8192];
         int carry = -1;
         try (InputStream in = new BufferedInputStream(new FileInputStream(pcmFile))) {
             int read;
             while ((read = in.read(buffer)) != -1) {
+                if(Thread.currentThread().isInterrupted()) throw new IOException("Transcription canceled");
                 int offset = 0;
                 int sampleCount = read / 2;
                 if (carry >= 0 && read > 0) {
@@ -168,22 +177,7 @@ final class OfflineParakeetClient {
     }
 
     private static void download(String url, File destination) throws IOException {
-        HttpURLConnection connection = (HttpURLConnection) new URL(url).openConnection();
-        connection.setConnectTimeout(30000);
-        connection.setReadTimeout(300000);
-        int code = connection.getResponseCode();
-        if (code < 200 || code >= 300) {
-            throw new IOException("Parakeet model download failed (" + code + ").");
-        }
-        try (InputStream in = new BufferedInputStream(connection.getInputStream());
-             FileOutputStream fileOut = new FileOutputStream(destination);
-             BufferedOutputStream out = new BufferedOutputStream(fileOut)) {
-            byte[] buffer = new byte[1024 * 64];
-            int read;
-            while ((read = in.read(buffer)) != -1) {
-                out.write(buffer, 0, read);
-            }
-        }
+        ModelDownload.download(url,destination,800L*1024*1024);
     }
 
     private static void extractTarBz2(File archive, File destinationRoot) throws IOException {
@@ -192,9 +186,12 @@ final class OfflineParakeetClient {
              BZip2CompressorInputStream bzIn = new BZip2CompressorInputStream(fileIn);
              TarArchiveInputStream tarIn = new TarArchiveInputStream(bzIn)) {
             TarArchiveEntry entry;
+            int entries=0; long expanded=0;
             byte[] buffer = new byte[1024 * 64];
             while ((entry = tarIn.getNextTarEntry()) != null) {
-                File outFile = new File(destinationRoot, entry.getName());
+                if(++entries>256) throw new IOException("Model entry limit exceeded");
+                if(!entry.isDirectory() && !entry.isFile() || entry.isSymbolicLink() || entry.isLink()) throw new IOException("Unsupported model entry");
+                File outFile = ModelFiles.contained(destinationRoot, entry.getName());
                 String outPath = outFile.getCanonicalPath();
                 if (!outPath.startsWith(rootPath)) {
                     throw new IOException("Blocked unsafe Parakeet archive path.");
@@ -212,6 +209,9 @@ final class OfflineParakeetClient {
                          BufferedOutputStream out = new BufferedOutputStream(fileOut)) {
                         int read;
                         while ((read = tarIn.read(buffer)) != -1) {
+                            if(Thread.currentThread().isInterrupted()) throw new IOException("Model setup canceled");
+                            expanded+=read;
+                            if(expanded>900L*1024*1024) throw new IOException("Expanded model limit exceeded");
                             out.write(buffer, 0, read);
                         }
                     }

@@ -71,6 +71,7 @@ final class AnthropicClient {
             String input,
             int maxTokens
     ) throws Exception {
+        if(input.length()>CaptureLimits.MAX_TEXT_CHARS) throw new IOException("Text exceeds cleanup limit");
         String apiKey = requiredApiKey(context);
         JSONObject body = new JSONObject()
                 .put("model", model)
@@ -83,6 +84,7 @@ final class AnthropicClient {
                                 .put("content", input)));
 
         JSONObject json = new JSONObject(sendMessage(apiKey, body));
+        if (!"end_turn".equals(json.optString("stop_reason"))) throw new IOException("Cleanup was incomplete; keeping raw text");
         JSONArray content = json.optJSONArray("content");
         StringBuilder builder = new StringBuilder();
         if (content != null) {
@@ -108,7 +110,7 @@ final class AnthropicClient {
         if (trimmedKey.isEmpty()) {
             throw new IllegalStateException("Add your Anthropic API key first.");
         }
-        HttpURLConnection connection = (HttpURLConnection) new URL(MODELS_URL).openConnection();
+        HttpURLConnection connection = SafeHttp.open(MODELS_URL);
         connection.setRequestMethod("GET");
         connection.setConnectTimeout(30000);
         connection.setReadTimeout(30000);
@@ -131,6 +133,7 @@ final class AnthropicClient {
 
     static List<String> defaultTransformModels() {
         List<String> models = new ArrayList<>();
+        models.add("claude-sonnet-4-6");
         models.add("claude-haiku-4-5");
         models.add("claude-sonnet-5");
         models.add("claude-opus-4-8");
@@ -174,7 +177,7 @@ final class AnthropicClient {
     }
 
     private static String sendMessage(String apiKey, JSONObject body) throws IOException {
-        HttpURLConnection connection = (HttpURLConnection) new URL(MESSAGES_URL).openConnection();
+        HttpURLConnection connection = SafeHttp.open(MESSAGES_URL);
         connection.setRequestMethod("POST");
         connection.setDoOutput(true);
         connection.setConnectTimeout(30000);
@@ -193,28 +196,10 @@ final class AnthropicClient {
     }
 
     private static String readResponse(HttpURLConnection connection, String label) throws IOException {
-        int code = connection.getResponseCode();
-        InputStream stream = code >= 200 && code < 300 ? connection.getInputStream() : connection.getErrorStream();
-        String body = readAll(stream);
-        if (code < 200 || code >= 300) {
-            throw new IOException(label + " failed (" + code + "): " + body);
-        }
-        return body;
+        return SafeHttp.response(connection,label);
     }
 
-    private static String readAll(InputStream stream) throws IOException {
-        if (stream == null) {
-            return "";
-        }
-        try (BufferedReader reader = new BufferedReader(new InputStreamReader(stream, StandardCharsets.UTF_8))) {
-            StringBuilder builder = new StringBuilder();
-            String line;
-            while ((line = reader.readLine()) != null) {
-                builder.append(line);
-            }
-            return builder.toString();
-        }
-    }
+
 
     private static String stripWholeOutputWrappers(String text) {
         String result = text == null ? "" : text.trim();

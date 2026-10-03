@@ -22,6 +22,7 @@ final class Prefs {
     static final String PROVIDER_ANTHROPIC = "anthropic";
     static final String PROVIDER_XAI = "xai";
     static final String PROVIDER_DEEPGRAM = "deepgram";
+    static final String PROVIDER_OFFLINE_ZIPFORMER = "offline_zipformer";
     static final String PROVIDER_OFFLINE_VOSK = "offline_vosk";
     static final String PROVIDER_OFFLINE_PARAKEET = "offline_parakeet";
 
@@ -30,6 +31,8 @@ final class Prefs {
     /** Samsung-style 3x4 keypad, one tap per letter group. */
     static final String CHINESE_LAYOUT_KEYPAD = "keypad";
 
+    static final String PRESET_AI_PROMPT = "ai_prompt";
+    static final String PRESET_EMAIL = "email";
     static final String PRESET_RAW = "raw";
     static final String PRESET_CASUAL = "casual";
     static final String PRESET_BUSINESS = "business";
@@ -87,28 +90,23 @@ final class Prefs {
     }
 
     static String openAiApiKey(Context context) {
-        return shared(context).getString(KEY_OPENAI_API_KEY, "");
+        return SecureKeys.read(context, KEY_OPENAI_API_KEY);
     }
 
     static String anthropicApiKey(Context context) {
-        return shared(context).getString(KEY_ANTHROPIC_API_KEY, "");
+        return SecureKeys.read(context, KEY_ANTHROPIC_API_KEY);
     }
 
     static String xAiApiKey(Context context) {
-        return shared(context).getString(KEY_XAI_API_KEY, "");
+        return SecureKeys.read(context, KEY_XAI_API_KEY);
     }
 
     static String deepgramApiKey(Context context) {
-        return shared(context).getString(KEY_DEEPGRAM_API_KEY, "");
+        return SecureKeys.read(context, KEY_DEEPGRAM_API_KEY);
     }
 
     static void saveApiKeys(Context context, String openAiApiKey, String anthropicApiKey, String xAiApiKey, String deepgramApiKey) {
-        shared(context).edit()
-                .putString(KEY_OPENAI_API_KEY, trim(openAiApiKey))
-                .putString(KEY_ANTHROPIC_API_KEY, trim(anthropicApiKey))
-                .putString(KEY_XAI_API_KEY, trim(xAiApiKey))
-                .putString(KEY_DEEPGRAM_API_KEY, trim(deepgramApiKey))
-                .apply();
+        SecureKeys.save(context, openAiApiKey, anthropicApiKey, xAiApiKey, deepgramApiKey);
     }
 
     static boolean hasOpenAiApiKey(Context context) {
@@ -133,7 +131,7 @@ final class Prefs {
     }
 
     static String transcriptionProvider(Context context) {
-        return sanitizeTranscriptionProvider(shared(context).getString(KEY_TRANSCRIPTION_PROVIDER, PROVIDER_OPENAI));
+        return sanitizeTranscriptionProvider(shared(context).getString(KEY_TRANSCRIPTION_PROVIDER, PROVIDER_OFFLINE_ZIPFORMER));
     }
 
     static void setTranscriptionProvider(Context context, String provider) {
@@ -145,7 +143,7 @@ final class Prefs {
     }
 
     static String transformProvider(Context context) {
-        return sanitizeTransformProvider(shared(context).getString(KEY_TRANSFORM_PROVIDER, PROVIDER_OPENAI));
+        return sanitizeTransformProvider(shared(context).getString(KEY_TRANSFORM_PROVIDER, PROVIDER_ANTHROPIC));
     }
 
     static void setTransformProvider(Context context, String provider) {
@@ -266,7 +264,7 @@ final class Prefs {
         if (!isFunVoiceStyle(preset)) {
             prompt = prompt + "\n\n" + languageContract();
         }
-        return prompt + "\n\nSelected expression level: " + expressionLabel(expression) + "\n"
+        return prompt + "\n\n" + CleanupContract.PRESERVATION + "\n\nSelected expression level: " + expressionLabel(expression) + "\n"
                 + expressionGuidanceForPreset(context, preset, expression);
     }
 
@@ -539,7 +537,9 @@ final class Prefs {
 
     static boolean canDeletePromptProfile(String id) {
         String sanitized = sanitizeEditablePreset(id);
-        return !PRESET_CASUAL.equals(sanitized)
+        return !PRESET_AI_PROMPT.equals(sanitized)
+                && !PRESET_EMAIL.equals(sanitized)
+                && !PRESET_CASUAL.equals(sanitized)
                 && !PRESET_FAMILY.equals(sanitized)
                 && !isFunVoiceStyle(sanitized);
     }
@@ -573,7 +573,19 @@ final class Prefs {
     }
 
     static boolean enableTransform(Context context) {
-        return shared(context).getBoolean(KEY_ENABLE_TRANSFORM, true);
+        return shared(context).getBoolean(KEY_ENABLE_TRANSFORM, false);
+    }
+
+    static void setEnableTransform(Context context, boolean enabled) {
+        shared(context).edit().putBoolean(KEY_ENABLE_TRANSFORM, enabled).apply();
+    }
+    static boolean automaticContext(Context context) { return shared(context).getBoolean("automatic_context",true); }
+    static void setAutomaticContext(Context context, boolean value) { shared(context).edit().putBoolean("automatic_context",value).apply(); }
+    static boolean historyEnabled(Context context) { return shared(context).getBoolean("history_enabled",false); }
+    static void setHistoryEnabled(Context context, boolean value) {
+        SharedPreferences.Editor edit=shared(context).edit().putBoolean("history_enabled",value);
+        if(!value) edit.remove(KEY_TRANSCRIPT_HISTORY_JSON);
+        edit.apply();
     }
 
     static boolean translationEnabled(Context context) {
@@ -669,8 +681,7 @@ final class Prefs {
             String activePreset
     ) {
         shared(context).edit()
-                .putString(KEY_OPENAI_API_KEY, openAiApiKey.trim())
-                .putString(KEY_TRANSCRIPTION_PROVIDER, sanitizeTranscriptionProvider(transcriptionProvider))
+                                .putString(KEY_TRANSCRIPTION_PROVIDER, sanitizeTranscriptionProvider(transcriptionProvider))
                 .putString(KEY_TRANSFORM_PROVIDER, sanitizeTransformProvider(transformProvider))
                 .putString(KEY_TRANSCRIPTION_MODEL, transcriptionModel.trim())
                 .putString(KEY_TRANSFORM_MODEL, transformModel.trim())
@@ -694,6 +705,8 @@ final class Prefs {
     }
 
     static String defaultLabelForPreset(String preset) {
+        if (PRESET_AI_PROMPT.equals(preset)) return "AI Prompt";
+        if (PRESET_EMAIL.equals(preset)) return "Email";
         if (PRESET_BUSINESS.equals(preset) || PRESET_PROFESSIONAL.equals(preset)) {
             return "Work";
         }
@@ -725,6 +738,8 @@ final class Prefs {
     }
 
     static String defaultIconForPreset(String preset) {
+        if (PRESET_AI_PROMPT.equals(preset)) return "AI";
+        if (PRESET_EMAIL.equals(preset)) return "@";
         if (PRESET_BUSINESS.equals(preset) || PRESET_PROFESSIONAL.equals(preset)) {
             return "💼";
         }
@@ -764,14 +779,16 @@ final class Prefs {
     }
 
     static String defaultPromptForPreset(String preset) {
+        if (PRESET_AI_PROMPT.equals(preset)) return CleanupContract.prompt("AI prompt");
+        if (PRESET_EMAIL.equals(preset)) return CleanupContract.prompt("email");
         if (PRESET_RAW.equals(preset)) {
             return "";
         }
         if (PRESET_CASUAL.equals(preset)) {
-            return casualPrompt();
+            return CleanupContract.prompt("casual");
         }
         if (PRESET_BUSINESS.equals(preset) || PRESET_PROFESSIONAL.equals(preset)) {
-            return businessPrompt();
+            return CleanupContract.prompt("professional");
         }
         if (PRESET_FAMILY.equals(preset) || PRESET_PARTNER.equals(preset)) {
             return relationshipPrompt(defaultStyleGuidance(preset));
@@ -783,6 +800,7 @@ final class Prefs {
     }
 
     private static String defaultStyleGuidance(String preset) {
+        if (PRESET_AI_PROMPT.equals(preset) || PRESET_EMAIL.equals(preset)) return CleanupContract.prompt(preset);
         if (PRESET_BUSINESS.equals(preset) || PRESET_PROFESSIONAL.equals(preset)) {
             return "Write for a coworker, client, manager, or professional contact. Produce clear, concise, polished, send-ready writing that still sounds human rather than corporate or robotic. "
                     + "Use an appropriately professional level of formality, replace overly casual phrasing with natural workplace language, and make requests and next steps easy to understand. "
@@ -836,7 +854,8 @@ final class Prefs {
         if (preset.startsWith("custom_")) {
             return preset;
         }
-        if (PRESET_BUSINESS.equals(preset)
+        if (PRESET_AI_PROMPT.equals(preset) || PRESET_EMAIL.equals(preset)
+                || PRESET_BUSINESS.equals(preset)
                 || PRESET_CASUAL.equals(preset)
                 || PRESET_FAMILY.equals(preset)
                 || PRESET_PARTNER.equals(preset)
@@ -860,6 +879,7 @@ final class Prefs {
         if (PROVIDER_DEEPGRAM.equals(provider)) {
             return "Deepgram";
         }
+        if (PROVIDER_OFFLINE_ZIPFORMER.equals(provider)) return "Bundled Zipformer";
         if (PROVIDER_OFFLINE_VOSK.equals(provider)) {
             return "Offline Vosk";
         }
@@ -879,14 +899,16 @@ final class Prefs {
         if (PROVIDER_DEEPGRAM.equals(provider)) {
             return deepgramApiKey(context);
         }
-        if (PROVIDER_OFFLINE_VOSK.equals(provider) || PROVIDER_OFFLINE_PARAKEET.equals(provider)) {
+        if (PROVIDER_OFFLINE_ZIPFORMER.equals(provider)
+                || PROVIDER_OFFLINE_VOSK.equals(provider) || PROVIDER_OFFLINE_PARAKEET.equals(provider)) {
             return "";
         }
         return openAiApiKey(context);
     }
 
     static boolean hasApiKeyForProvider(Context context, String provider) {
-        return PROVIDER_OFFLINE_VOSK.equals(provider)
+        return PROVIDER_OFFLINE_ZIPFORMER.equals(provider)
+                || PROVIDER_OFFLINE_VOSK.equals(provider)
                 || PROVIDER_OFFLINE_PARAKEET.equals(provider)
                 || !trim(apiKeyForProvider(context, provider)).isEmpty();
     }
@@ -899,6 +921,7 @@ final class Prefs {
         if (PROVIDER_DEEPGRAM.equals(sanitized)) {
             return "nova-3";
         }
+        if (PROVIDER_OFFLINE_ZIPFORMER.equals(sanitized)) return OfflineZipformerClient.MODEL_ID;
         if (PROVIDER_OFFLINE_VOSK.equals(sanitized)) {
             return "vosk-model-small-en-us-0.15";
         }
@@ -911,7 +934,7 @@ final class Prefs {
     static String defaultTransformModel(String provider) {
         String sanitized = sanitizeTransformProvider(provider);
         if (PROVIDER_ANTHROPIC.equals(sanitized)) {
-            return "claude-haiku-4-5";
+            return "claude-sonnet-4-6";
         }
         if (PROVIDER_XAI.equals(sanitized)) {
             return "grok-4.3";
@@ -938,6 +961,7 @@ final class Prefs {
         return PROVIDER_OPENAI.equals(provider)
                 || PROVIDER_XAI.equals(provider)
                 || PROVIDER_DEEPGRAM.equals(provider)
+                || PROVIDER_OFFLINE_ZIPFORMER.equals(provider)
                 || PROVIDER_OFFLINE_VOSK.equals(provider)
                 || PROVIDER_OFFLINE_PARAKEET.equals(provider);
     }
@@ -951,12 +975,13 @@ final class Prefs {
     static String sanitizeTranscriptionProvider(String provider) {
         if (PROVIDER_XAI.equals(provider)
                 || PROVIDER_DEEPGRAM.equals(provider)
+                || PROVIDER_OFFLINE_ZIPFORMER.equals(provider)
                 || PROVIDER_OFFLINE_VOSK.equals(provider)
                 || PROVIDER_OFFLINE_PARAKEET.equals(provider)
                 || PROVIDER_OPENAI.equals(provider)) {
             return provider;
         }
-        return PROVIDER_OPENAI;
+        return PROVIDER_OFFLINE_ZIPFORMER;
     }
 
     static String sanitizeTransformProvider(String provider) {
@@ -1026,6 +1051,8 @@ final class Prefs {
 
     private static List<PromptProfile> migratedPromptProfiles(Context context) {
         List<PromptProfile> profiles = new ArrayList<>();
+        profiles.add(defaultPromptProfile(PRESET_AI_PROMPT));
+        profiles.add(defaultPromptProfile(PRESET_EMAIL));
         profiles.add(defaultPromptProfile(PRESET_CASUAL));
         profiles.add(defaultPromptProfile(PRESET_BUSINESS));
         profiles.add(defaultPromptProfile(PRESET_FAMILY));
@@ -1045,6 +1072,9 @@ final class Prefs {
 
     private static boolean ensureDefaultProfiles(List<PromptProfile> profiles) {
         boolean changed = false;
+        for (String preset : new String[]{PRESET_AI_PROMPT, PRESET_EMAIL}) {
+            if (!containsProfile(profiles,preset)) { profiles.add(defaultPromptProfile(preset)); changed=true; }
+        }
         if (!containsProfile(profiles, PRESET_CASUAL)) {
             profiles.add(0, defaultPromptProfile(PRESET_CASUAL));
             changed = true;
@@ -1162,6 +1192,7 @@ final class Prefs {
     }
 
     static List<VoiceHistoryItem> transcriptHistory(Context context) {
+        if (!historyEnabled(context)) return new ArrayList<>();
         List<VoiceHistoryItem> history = new ArrayList<>();
         String json = shared(context).getString(KEY_TRANSCRIPT_HISTORY_JSON, "[]");
         try {
@@ -1239,6 +1270,7 @@ final class Prefs {
             String operation,
             String targetLanguage
     ) {
+        if (!historyEnabled(context)) return "";
         String raw = rawText == null ? "" : rawText.trim();
         String result = finalText == null ? "" : finalText.trim();
         if (raw.isEmpty() && result.isEmpty()) {
