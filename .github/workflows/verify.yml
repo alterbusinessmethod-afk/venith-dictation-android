@@ -19,10 +19,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Select Java 17 and Android SDK
-        run: |
-          echo "JAVA_HOME=$JAVA_HOME_17_X64" >> "$GITHUB_ENV"
-          echo "$JAVA_HOME_17_X64/bin" >> "$GITHUB_PATH"
-          sdkmanager "platforms;android-35" "build-tools;35.0.0"
+        run: bash scripts/setup_ci_android.sh
       - name: Prepare verified bundled model
         run: |
           python3 scripts/prepare_model.py
