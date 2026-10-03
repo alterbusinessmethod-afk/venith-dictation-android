@@ -96,7 +96,7 @@ def check_release(tools, apk):
     if "application-debuggable" in text or not re.search(
             r"package: name='com\.venith\.dictation'.*versionCode='10001'.*versionName='1\.0\.0-preview\.1'", text):
         raise PackageFailure("Expected nondebuggable Venith release identity")
-    if not re.search(r"^sdkVersion:'26'$", text, re.MULTILINE) or not re.search(
+    if not re.search(r"^minSdkVersion:'26'$", text, re.MULTILINE) or not re.search(
             r"^targetSdkVersion:'35'$", text, re.MULTILINE):
         raise PackageFailure("Expected pinned minimum and target SDK")
     contents = run([sys.executable, "scripts/verify_apk.py", str(apk)], "ARM64 and bundled model verification")
