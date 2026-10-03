@@ -14,19 +14,47 @@ import android.widget.TextView;
 
 public class KeyboardTestActivity extends Activity {
     private EditText testInput;
+    private final Runnable showKeyboard = () -> {
+        if (isFinishing() || isDestroyed() || testInput == null
+                || !testInput.hasWindowFocus()) {
+            return;
+        }
+        testInput.requestFocus();
+        InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+        if (imm != null) {
+            imm.showSoftInput(testInput, InputMethodManager.SHOW_IMPLICIT);
+        }
+    };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Ui.applyWindow(this);
+        getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE
+                | android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         setContentView(buildContent());
         testInput.requestFocus();
-        testInput.postDelayed(() -> {
-            InputMethodManager imm = (InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
-            if (imm != null) {
-                imm.showSoftInput(testInput, InputMethodManager.SHOW_IMPLICIT);
-            }
-        }, 300);
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (testInput == null) {
+            return;
+        }
+        testInput.removeCallbacks(showKeyboard);
+        if (hasFocus) {
+            testInput.postDelayed(showKeyboard, 100);
+            testInput.postDelayed(showKeyboard, 450);
+        }
+    }
+
+    @Override
+    protected void onStop() {
+        if (testInput != null) {
+            testInput.removeCallbacks(showKeyboard);
+        }
+        super.onStop();
     }
 
     private LinearLayout buildContent() {

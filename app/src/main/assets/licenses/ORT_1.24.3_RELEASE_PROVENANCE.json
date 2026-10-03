@@ -1,0 +1,87 @@
+{
+  "observed_at_utc": "2026-10-03T20:14:06.955351+00:00",
+  "result": "ORT_1.24.3_RELEASE_NOTICE_GATES_PASS",
+  "reported_runtime_version": "1.24.3",
+  "native_receipt": {
+    "bytes": 135,
+    "sha256": "85fe7c1a7a7443e23dbdcc2aff0b0ebf243e70dff066b28321df2fff1847b8c5",
+    "method": "OrtApiBase.GetVersionString in Android process",
+    "public_ci_run": "https://github.com/alterbusinessmethod-afk/venith-dictation-android/actions/runs/37149999903"
+  },
+  "release_tag": "v1.24.3",
+  "resolved_source_commit": "3a728b75062256951b6e19ce718907cf1a1d4cf0",
+  "tag_resolution": [
+    {
+      "url": "https://api.github.com/repos/microsoft/onnxruntime/git/ref/tags/v1.24.3",
+      "bytes": 353,
+      "sha256": "a7161f54e7d681ce946e8443c27365a2e7b3530c8abc1b7f57fd011a131e0e58",
+      "object": {
+        "sha": "3a728b75062256951b6e19ce718907cf1a1d4cf0",
+        "type": "commit",
+        "url": "https://api.github.com/repos/microsoft/onnxruntime/git/commits/3a728b75062256951b6e19ce718907cf1a1d4cf0"
+      }
+    }
+  ],
+  "files": [
+    {
+      "file": "full-text/onnxruntime-1.24.3-LICENSE",
+      "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/3a728b75062256951b6e19ce718907cf1a1d4cf0/LICENSE",
+      "commit": "3a728b75062256951b6e19ce718907cf1a1d4cf0",
+      "release_tag": "v1.24.3",
+      "bytes": 1073,
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+      "coverage": "exact official release-tag source; matches runtime-reported version only"
+    },
+    {
+      "file": "full-text/onnxruntime-1.24.3-ThirdPartyNotices.txt",
+      "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/3a728b75062256951b6e19ce718907cf1a1d4cf0/ThirdPartyNotices.txt",
+      "commit": "3a728b75062256951b6e19ce718907cf1a1d4cf0",
+      "release_tag": "v1.24.3",
+      "bytes": 325054,
+      "sha256": "0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2",
+      "coverage": "exact official release-tag source; matches runtime-reported version only"
+    },
+    {
+      "file": "full-text/onnxruntime-1.24.3-onnxruntime_c_api.h",
+      "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/3a728b75062256951b6e19ce718907cf1a1d4cf0/include/onnxruntime/core/session/onnxruntime_c_api.h",
+      "commit": "3a728b75062256951b6e19ce718907cf1a1d4cf0",
+      "release_tag": "v1.24.3",
+      "bytes": 373908,
+      "sha256": "9ed0d7054a4e74249467365b25b415d36f51a44a6349e2a994a1812e4723d1e2",
+      "coverage": "exact official release-tag source; matches runtime-reported version only"
+    },
+    {
+      "file": "full-text/onnxruntime-1.24.3-VERSION_NUMBER",
+      "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/3a728b75062256951b6e19ce718907cf1a1d4cf0/VERSION_NUMBER",
+      "commit": "3a728b75062256951b6e19ce718907cf1a1d4cf0",
+      "release_tag": "v1.24.3",
+      "bytes": 7,
+      "sha256": "55d2dc09e8c9400675670878b98b6e929c80c12a06fd950431c9d1d3a959d157",
+      "coverage": "exact official release-tag source; matches runtime-reported version only"
+    }
+  ],
+  "comparison": [
+    {
+      "file": "LICENSE",
+      "old_source_commit": "befed9adff8ac4c5f23240d4b3732029f1e6e92f",
+      "old_bytes": 1073,
+      "old_sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+      "release_bytes": 1073,
+      "release_sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+      "byte_identical": true
+    },
+    {
+      "file": "ThirdPartyNotices.txt",
+      "old_source_commit": "befed9adff8ac4c5f23240d4b3732029f1e6e92f",
+      "old_bytes": 338088,
+      "old_sha256": "143764b952fdb1a7c69ce653bfba74a7744d6a8a573bfb73e235fba356c83de3",
+      "release_bytes": 325054,
+      "release_sha256": "0e07b95f3a8d6230037707c5c4a2b554d12c4cb67369669ac255635528ffcee2",
+      "byte_identical": false
+    }
+  ],
+  "binary_to_source_sbom_proven": false,
+  "limitation": "Runtime version matches official release; publisher binary patches, build flags, linked components and exact source revision remain unproven.",
+  "scope": "Additive files only; all original current-source references and combined bundle preserved unchanged.",
+  "combined_packaged_notice_sha256": "54cad35243cd55658632b873891973961482d130b68762f113f70903bf763243"
+}

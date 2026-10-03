@@ -99,6 +99,7 @@ public class DeviceSmokeTest {
         serviceInfo.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
         instrumentation.getUiAutomation().setServiceInfo(serviceInfo);
         Activity activity = (Activity) instrumentation.startActivitySync(new Intent(context, screen).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        try {
         instrumentation.waitForIdleSync();
         SystemClock.sleep(1800);
         if (screen == KeyboardTestActivity.class) {
@@ -133,7 +134,9 @@ public class DeviceSmokeTest {
             assertTrue(screenshot.compress(Bitmap.CompressFormat.PNG,100,out));
         }
         screenshot.recycle();
-        instrumentation.runOnMainSync(activity::finish);
+        } finally {
+            instrumentation.runOnMainSync(activity::finish);
+        }
     }
 
     private boolean hasText(android.view.accessibility.AccessibilityNodeInfo node, String text) {
