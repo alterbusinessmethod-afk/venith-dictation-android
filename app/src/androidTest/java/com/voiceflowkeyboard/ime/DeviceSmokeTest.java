@@ -37,13 +37,26 @@ public class DeviceSmokeTest {
             while ((count = in.read(block)) != -1) out.write(block, 0, count);
         }
         long start = SystemClock.elapsedRealtime();
-        String text = OfflineZipformerClient.transcribePcm(context, pcm);
-        assertTrue("A real speech clip must produce a phrase", text.trim().split("\\s+").length >= 6);
-        assertTrue("The public reference clip describes stew", text.toLowerCase(java.util.Locale.ROOT).contains("stew"));
-        String receipt = "Android API " + android.os.Build.VERSION.SDK_INT + "\nEmulator ABI " + android.os.Build.SUPPORTED_ABIS[0] + "\nSample: LibriSpeech 1089-134686-0001\nText: " + text + "\nDecode and first model staging milliseconds: " + (SystemClock.elapsedRealtime() - start) + "\nThis is an emulator receipt, not an S22 Ultra benchmark.\n";
+        java.util.concurrent.atomic.AtomicBoolean measuring=new java.util.concurrent.atomic.AtomicBoolean(true);
+        java.util.concurrent.atomic.AtomicLong peak=new java.util.concurrent.atomic.AtomicLong(android.os.Debug.getPss());
+        Thread monitor=new Thread(() -> {
+            while(measuring.get()) {
+                peak.accumulateAndGet(android.os.Debug.getPss(),Math::max);
+                try {Thread.sleep(100);} catch (InterruptedException e) {Thread.currentThread().interrupt();break;}
+            }
+        },"venith-smoke-pss");
+        monitor.setDaemon(true);monitor.start();
+        String text;
+        try {text=OfflineZipformerClient.transcribePcm(context,pcm);}
+        finally {measuring.set(false);monitor.join(1500);}
+        String receipt = "Android API " + android.os.Build.VERSION.SDK_INT + "\nEmulator ABI " + android.os.Build.SUPPORTED_ABIS[0] + "\nSample: public k2-fsa LibriSpeech fixture 1089-134686-0001\nText: " + text + "\nDecode and first model staging milliseconds: " + (SystemClock.elapsedRealtime() - start) + "\nObserved test/app process peak PSS KiB: " + peak.get() + "\nThis is an emulator receipt, not an S22 Ultra benchmark.\nReference: https://k2-fsa.github.io/sherpa/cpp/offline_asr/gigaspeech.html\n";
         try (FileOutputStream out = new FileOutputStream(evidence("model-runtime.txt"))) {
             out.write(receipt.getBytes(StandardCharsets.UTF_8));
         }
+        assertTrue("A real speech clip must produce a phrase", text.trim().split("\\s+").length >= 6);
+        String normalized=text.toLowerCase(java.util.Locale.ROOT).replaceAll("[^a-z ]"," ").replaceAll("\\s+"," ");
+        assertTrue("Pinned reference describes yellow lamps after nightfall: "+text,normalized.contains("yellow lamps") && normalized.contains("nightfall"));
+        assertTrue("Measured emulator process PSS must remain under 1 GB",peak.get()*1024<1_000_000_000L);
     }
 
     @Test public void apiKeyMigrationEncryptsAndReplacementRecoversCorruption() {
@@ -82,19 +95,26 @@ public class DeviceSmokeTest {
     }
 
     private void capture(Class<? extends Activity> screen, String name) throws Exception {
+        android.accessibilityservice.AccessibilityServiceInfo serviceInfo=instrumentation.getUiAutomation().getServiceInfo();
+        serviceInfo.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
+        instrumentation.getUiAutomation().setServiceInfo(serviceInfo);
         Activity activity = (Activity) instrumentation.startActivitySync(new Intent(context, screen).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         instrumentation.waitForIdleSync();
         SystemClock.sleep(1800);
         if (screen == KeyboardTestActivity.class) {
-            android.accessibilityservice.AccessibilityServiceInfo serviceInfo=instrumentation.getUiAutomation().getServiceInfo();
-            serviceInfo.flags |= android.accessibilityservice.AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS;
-            instrumentation.getUiAutomation().setServiceInfo(serviceInfo);
             boolean visible=false;
-            for (android.view.accessibility.AccessibilityWindowInfo window:instrumentation.getUiAutomation().getWindows()) {
-                if (window.getType()==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
-                    android.view.accessibility.AccessibilityNodeInfo node=window.getRoot();
-                    visible=node!=null && "com.venith.dictation".contentEquals(node.getPackageName()) && hasText(node,"Start or stop dictation recording");
+            for (int attempt=0;attempt<40 && !visible;attempt++) {
+                for (android.view.accessibility.AccessibilityWindowInfo window:instrumentation.getUiAutomation().getWindows()) {
+                    if (window.getType()==android.view.accessibility.AccessibilityWindowInfo.TYPE_INPUT_METHOD) {
+                        android.view.accessibility.AccessibilityNodeInfo node=window.getRoot();
+                        visible=node!=null && "com.venith.dictation".equals(String.valueOf(node.getPackageName())) && hasText(node,"Start or stop dictation recording");
+                    }
                 }
+                if(!visible)SystemClock.sleep(100);
+            }
+            if(!visible) {
+                Bitmap diagnostic=instrumentation.getUiAutomation().takeScreenshot();
+                if(diagnostic!=null)try(FileOutputStream out=new FileOutputStream(evidence("keyboard-failed.png"))){diagnostic.compress(Bitmap.CompressFormat.PNG,100,out);}
             }
             assertTrue("The Venith IME must be visible",visible);
         }

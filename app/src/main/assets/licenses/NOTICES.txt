@@ -239,3 +239,5 @@ Apache License 2.0 text:
    WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
    See the License for the specific language governing permissions and
    limitations under the License.
+
+Complete dependency notices are retained in THIRD_PARTY_NOTICES.txt alongside this file. Exact Maven licenses and conservative native-source references are separated by provenance. Native binary-to-source build mappings are not fully published by the wrapper vendor.

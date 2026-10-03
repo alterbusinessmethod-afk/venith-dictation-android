@@ -1,0 +1,275 @@
+{
+  "observed_at_utc": "2026-10-03T19:49:58.169064+00:00",
+  "status": "Partial",
+  "coverage_limitations": [
+    "Unmapped embedded ONNX Runtime upstream revision",
+    "AAF POM Apache-2.0 versus repository MIT discrepancy",
+    "Unmapped Vosk native dependency revisions",
+    "Final Gradle conflict-resolved graph pending"
+  ],
+  "full_texts": [
+    {
+      "file": "commons-compress-1.27.1-META-INF_LICENSE.txt",
+      "source": "https://repo.maven.apache.org/maven2/org/apache/commons/commons-compress/1.27.1/commons-compress-1.27.1.jar!/META-INF/LICENSE.txt",
+      "bytes": 11357,
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+      "status": "Success",
+      "coverage": "exact published artifact notice"
+    },
+    {
+      "file": "commons-compress-1.27.1-META-INF_NOTICE.txt",
+      "source": "https://repo.maven.apache.org/maven2/org/apache/commons/commons-compress/1.27.1/commons-compress-1.27.1.jar!/META-INF/NOTICE.txt",
+      "bytes": 178,
+      "sha256": "28a309fd415da6e802ecf85061a451f7ac4353f3610f2982f7af29e9d1529289",
+      "status": "Success",
+      "coverage": "exact published artifact notice"
+    },
+    {
+      "file": "commons-io-2.16.1-META-INF_LICENSE.txt",
+      "source": "https://repo.maven.apache.org/maven2/commons-io/commons-io/2.16.1/commons-io-2.16.1.jar!/META-INF/LICENSE.txt",
+      "bytes": 11359,
+      "sha256": "8c6db340475136df3c1201d458fa5755698eace76e510471ecc9d857d6083dac",
+      "status": "Success",
+      "coverage": "exact published artifact notice"
+    },
+    {
+      "file": "commons-io-2.16.1-META-INF_NOTICE.txt",
+      "source": "https://repo.maven.apache.org/maven2/commons-io/commons-io/2.16.1/commons-io-2.16.1.jar!/META-INF/NOTICE.txt",
+      "bytes": 172,
+      "sha256": "67c72e54966f6545bd78b068b6f8ab1cabb5dd040d8a299e5ce00401ebdd030c",
+      "status": "Success",
+      "coverage": "exact published artifact notice"
+    },
+    {
+      "file": "commons-codec-1.17.1-META-INF_LICENSE.txt",
+      "source": "https://repo.maven.apache.org/maven2/commons-codec/commons-codec/1.17.1/commons-codec-1.17.1.jar!/META-INF/LICENSE.txt",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "status": "Success",
+      "coverage": "exact published artifact notice"
+    },
+    {
+      "file": "commons-codec-1.17.1-META-INF_NOTICE.txt",
+      "source": "https://repo.maven.apache.org/maven2/commons-codec/commons-codec/1.17.1/commons-codec-1.17.1.jar!/META-INF/NOTICE.txt",
+      "bytes": 175,
+      "sha256": "fc5bececcc4708ba23267644c1dbca212cfb015f21713f8080f99e441592d2e2",
+      "status": "Success",
+      "coverage": "exact published artifact notice"
+    },
+    {
+      "file": "commons-lang3-3.16.0-META-INF_LICENSE.txt",
+      "source": "https://repo.maven.apache.org/maven2/org/apache/commons/commons-lang3/3.16.0/commons-lang3-3.16.0.jar!/META-INF/LICENSE.txt",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "status": "Success",
+      "coverage": "exact published artifact notice"
+    },
+    {
+      "file": "commons-lang3-3.16.0-META-INF_NOTICE.txt",
+      "source": "https://repo.maven.apache.org/maven2/org/apache/commons/commons-lang3/3.16.0/commons-lang3-3.16.0.jar!/META-INF/NOTICE.txt",
+      "bytes": 174,
+      "sha256": "73c3dd73ad54910699e4e364345798d083a9126b9799663d4bdce8d7468b7f66",
+      "status": "Success",
+      "coverage": "exact published artifact notice"
+    },
+    {
+      "file": "jna-5.18.1-META-INF_AL2.0",
+      "source": "https://repo.maven.apache.org/maven2/net/java/dev/jna/jna/5.18.1/jna-5.18.1.aar!/classes.jar!/META-INF/AL2.0",
+      "bytes": 10174,
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "status": "Success",
+      "coverage": "exact published artifact notice"
+    },
+    {
+      "file": "jna-5.18.1-META-INF_LICENSE",
+      "source": "https://repo.maven.apache.org/maven2/net/java/dev/jna/jna/5.18.1/jna-5.18.1.aar!/classes.jar!/META-INF/LICENSE",
+      "bytes": 797,
+      "sha256": "07c938b23950ab7d47a24ef35f9f5da3a05ae164278dc959ad6994135ed59ff1",
+      "status": "Success",
+      "coverage": "exact published artifact notice"
+    },
+    {
+      "label": "jna-5.18.1",
+      "repo": "java-native-access/jna",
+      "ref": "5.18.1",
+      "commit": "3c493c1642b1555d541755e0984c968ba6c0f540",
+      "file": "jna-5.18.1-LICENSE",
+      "source": "https://raw.githubusercontent.com/java-native-access/jna/3c493c1642b1555d541755e0984c968ba6c0f540/LICENSE",
+      "bytes": 797,
+      "sha256": "07c938b23950ab7d47a24ef35f9f5da3a05ae164278dc959ad6994135ed59ff1",
+      "status": "Success",
+      "artifact_version_mapping": true,
+      "coverage": "official pinned source notice"
+    },
+    {
+      "label": "jna-5.18.1",
+      "repo": "java-native-access/jna",
+      "ref": "5.18.1",
+      "commit": "3c493c1642b1555d541755e0984c968ba6c0f540",
+      "file": "jna-5.18.1-AL2.0",
+      "source": "https://raw.githubusercontent.com/java-native-access/jna/3c493c1642b1555d541755e0984c968ba6c0f540/AL2.0",
+      "bytes": 10174,
+      "sha256": "0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594",
+      "status": "Success",
+      "artifact_version_mapping": true,
+      "coverage": "official pinned source notice"
+    },
+    {
+      "label": "jna-5.18.1",
+      "repo": "java-native-access/jna",
+      "ref": "5.18.1",
+      "commit": "3c493c1642b1555d541755e0984c968ba6c0f540",
+      "file": "jna-5.18.1-native_libffi_LICENSE",
+      "source": "https://raw.githubusercontent.com/java-native-access/jna/3c493c1642b1555d541755e0984c968ba6c0f540/native/libffi/LICENSE",
+      "bytes": 1132,
+      "sha256": "2c9c2acb9743e6b007b91350475308aee44691d96aa20eacef8e199988c8c388",
+      "status": "Success",
+      "artifact_version_mapping": true,
+      "coverage": "official pinned source notice"
+    },
+    {
+      "label": "kotlin-1.9.22",
+      "repo": "JetBrains/kotlin",
+      "ref": "v1.9.22",
+      "commit": "44ed2e94f57d63b380a81ad9dceba95b57f2f33d",
+      "file": "kotlin-1.9.22-license_LICENSE.txt",
+      "source": "https://raw.githubusercontent.com/JetBrains/kotlin/44ed2e94f57d63b380a81ad9dceba95b57f2f33d/license/LICENSE.txt",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "status": "Success",
+      "artifact_version_mapping": true,
+      "coverage": "official pinned source notice"
+    },
+    {
+      "label": "kotlin-1.9.22",
+      "repo": "JetBrains/kotlin",
+      "ref": "v1.9.22",
+      "commit": "44ed2e94f57d63b380a81ad9dceba95b57f2f33d",
+      "file": "kotlin-1.9.22-license_NOTICE.txt",
+      "source": "https://raw.githubusercontent.com/JetBrains/kotlin/44ed2e94f57d63b380a81ad9dceba95b57f2f33d/license/NOTICE.txt",
+      "bytes": 482,
+      "sha256": "ea7099352103ade6a6918bc7efb00f8bcd43db0e76b2da2e83237c0bc0ff1b19",
+      "status": "Success",
+      "artifact_version_mapping": true,
+      "coverage": "official pinned source notice"
+    },
+    {
+      "label": "gson-2.11.0",
+      "repo": "google/gson",
+      "ref": "gson-parent-2.11.0",
+      "commit": "828a97be0f8d58108b140b77df8dc76b657f4a87",
+      "file": "gson-2.11.0-LICENSE",
+      "source": "https://raw.githubusercontent.com/google/gson/828a97be0f8d58108b140b77df8dc76b657f4a87/LICENSE",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "status": "Success",
+      "artifact_version_mapping": true,
+      "coverage": "official pinned source notice"
+    },
+    {
+      "label": "errorprone-2.27.0",
+      "repo": "google/error-prone",
+      "ref": "v2.27.0",
+      "commit": "ebe0a014edf7a50345c3b9e958e876e8a9177f60",
+      "file": "errorprone-2.27.0-COPYING",
+      "source": "https://raw.githubusercontent.com/google/error-prone/ebe0a014edf7a50345c3b9e958e876e8a9177f60/COPYING",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "status": "Success",
+      "artifact_version_mapping": true,
+      "coverage": "official pinned source notice"
+    },
+    {
+      "label": "vosk-source-current-version-unmapped",
+      "repo": "alphacep/vosk-api",
+      "ref": "master",
+      "commit": "05adbfcc0df27a1535913c6accd4b7fc60ffd59d",
+      "file": "vosk-source-current-version-unmapped-COPYING",
+      "source": "https://raw.githubusercontent.com/alphacep/vosk-api/05adbfcc0df27a1535913c6accd4b7fc60ffd59d/COPYING",
+      "bytes": 10173,
+      "sha256": "bb618af833c817ab01c1564bd3ec75ba4b4f9cf30910a4a2168e30a674ee8cc6",
+      "status": "Success",
+      "artifact_version_mapping": false,
+      "coverage": "official pinned source notice"
+    },
+    {
+      "label": "androidappfactory-source-current-version-unmapped",
+      "repo": "bihe0832/AndroidAppFactory",
+      "ref": "master",
+      "commit": "9e1d091dd988d5272db40d6698b807758b55b7c7",
+      "file": "androidappfactory-source-current-version-unmapped-LICENSE",
+      "source": "https://raw.githubusercontent.com/bihe0832/AndroidAppFactory/9e1d091dd988d5272db40d6698b807758b55b7c7/LICENSE",
+      "bytes": 1079,
+      "sha256": "6a3747eec65d00fd0dc5b5b070bab3ffe5b1a6a228c09d093c6d5c0903c67a80",
+      "status": "Success",
+      "artifact_version_mapping": false,
+      "coverage": "official pinned source notice"
+    },
+    {
+      "label": "onnxruntime-source-current-version-unmapped",
+      "repo": "microsoft/onnxruntime",
+      "ref": "main",
+      "commit": "befed9adff8ac4c5f23240d4b3732029f1e6e92f",
+      "file": "onnxruntime-source-current-version-unmapped-LICENSE",
+      "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/befed9adff8ac4c5f23240d4b3732029f1e6e92f/LICENSE",
+      "bytes": 1073,
+      "sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c",
+      "status": "Success",
+      "artifact_version_mapping": false,
+      "coverage": "official pinned source notice"
+    },
+    {
+      "label": "onnxruntime-source-current-version-unmapped",
+      "repo": "microsoft/onnxruntime",
+      "ref": "main",
+      "commit": "befed9adff8ac4c5f23240d4b3732029f1e6e92f",
+      "file": "onnxruntime-source-current-version-unmapped-ThirdPartyNotices.txt",
+      "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/befed9adff8ac4c5f23240d4b3732029f1e6e92f/ThirdPartyNotices.txt",
+      "bytes": 338088,
+      "sha256": "143764b952fdb1a7c69ce653bfba74a7744d6a8a573bfb73e235fba356c83de3",
+      "status": "Success",
+      "artifact_version_mapping": false,
+      "coverage": "official pinned source notice"
+    },
+    {
+      "label": "kaldi-source-current-version-unmapped",
+      "repo": "kaldi-asr/kaldi",
+      "ref": "master",
+      "commit": "e02e35f0254bb033fab73d1df99fc34123e31d56",
+      "file": "kaldi-source-current-version-unmapped-COPYING",
+      "source": "https://raw.githubusercontent.com/kaldi-asr/kaldi/e02e35f0254bb033fab73d1df99fc34123e31d56/COPYING",
+      "bytes": 17264,
+      "sha256": "e68f06f3248553b47aa0014d176697c3cabab88395dd073f2887312742fa80b9",
+      "status": "Success",
+      "artifact_version_mapping": false,
+      "coverage": "official pinned source notice"
+    },
+    {
+      "file": "Apache-2.0.txt",
+      "source": "https://www.apache.org/licenses/LICENSE-2.0.txt",
+      "bytes": 11358,
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+      "status": "Success",
+      "coverage": "official pinned source notice"
+    },
+    {
+      "file": "CC-BY-4.0.txt",
+      "source": "https://creativecommons.org/licenses/by/4.0/legalcode.txt",
+      "bytes": 18657,
+      "sha256": "9ba9550ad48438d0836ddab3da480b3b69ffa0aac7b7878b5a0039e7ab429411",
+      "status": "Success",
+      "coverage": "official pinned source notice"
+    }
+  ],
+  "test_attribution": {
+    "file": "LIBRISPEECH_TEST_ATTRIBUTION.txt",
+    "bytes": 916,
+    "sha256": "1a1efb1dd1caafdb730d3f5b8d72c63f5b55d0d016af46bbb35d0e28b40f3e97",
+    "source": "https://www.openslr.org/12/"
+  },
+  "combined": {
+    "file": "RECOMMENDED_COMBINED_NOTICES.txt",
+    "bytes": 516245,
+    "sha256": "54c38f93d529ef8db833bfb1db96902002cb347f69ebe379b27e82b92ec6835c"
+  }
+}

@@ -22,7 +22,7 @@ hw.ramSize=2048
 hw.lcd.width=1080
 hw.lcd.height=1920
 hw.lcd.density=420
-hw.keyboard=yes
+hw.keyboard=no
 hw.gpu.enabled=yes
 hw.gpu.mode=swiftshader_indirect
 disk.dataPartition.size=2G
@@ -51,14 +51,17 @@ test "$(adb -s emulator-5554 shell getprop sys.boot_completed | tr -d '\r')" = 1
 adb -s emulator-5554 shell input keyevent 82
 adb -s emulator-5554 shell wm size 1080x1920
 adb -s emulator-5554 shell wm density 420
+adb -s emulator-5554 shell settings put secure show_ime_with_hard_keyboard 1
 adb -s emulator-5554 install -r app/build/outputs/apk/debug/app-debug.apk
 adb -s emulator-5554 install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 adb -s emulator-5554 shell pm grant com.venith.dictation android.permission.RECORD_AUDIO
 adb -s emulator-5554 shell ime enable com.venith.dictation/com.voiceflowkeyboard.ime.VoiceFlowKeyboardService
 adb -s emulator-5554 shell ime set com.venith.dictation/com.voiceflowkeyboard.ime.VoiceFlowKeyboardService
 adb -s emulator-5554 shell am instrument -w -r com.venith.dictation.test/androidx.test.runner.AndroidJUnitRunner | tee smoke-evidence/instrumentation.txt
+adb -s emulator-5554 pull /sdcard/Android/data/com.venith.dictation/files/verification smoke-evidence/ > smoke-evidence/pull.log 2>&1 || true
+adb -s emulator-5554 logcat -d -t 1500 > smoke-evidence/android-logcat.txt
+adb -s emulator-5554 shell dumpsys input_method > smoke-evidence/input-method.txt
 grep -Eq 'OK \([0-9]+ tests?\)' smoke-evidence/instrumentation.txt
 if grep -Eq 'FAILURES|INSTRUMENTATION_FAILED|INSTRUMENTATION_ABORTED' smoke-evidence/instrumentation.txt; then exit 1; fi
-adb -s emulator-5554 pull /sdcard/Android/data/com.venith.dictation/files/verification smoke-evidence/ > smoke-evidence/pull.log 2>&1
 adb -s emulator-5554 shell dumpsys meminfo com.venith.dictation > smoke-evidence/emulator-idle-memory.txt
 echo EMULATOR_SMOKE_PASS
