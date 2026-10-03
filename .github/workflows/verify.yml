@@ -30,6 +30,12 @@ jobs:
           ./gradlew --no-daemon --console=plain --max-workers=2 :app:testDebugUnitTest :app:assembleRelease :app:assembleDebug :app:assembleDebugAndroidTest :app:dependencies --configuration releaseRuntimeClasspath > build-verification.log 2>&1
       - name: Exercise native model and dark interface on emulator
         run: bash scripts/emulator_smoke.sh
+      - name: Sign and package trusted main candidate
+        if: success() && github.event_name == 'push' && github.ref == 'refs/heads/main' && github.repository == 'alterbusinessmethod-afk/venith-dictation-android'
+        env:
+          VENITH_SIGNING_STORE_BASE64: ${{ secrets.VENITH_SIGNING_STORE_BASE64 }}
+          VENITH_SIGNING_PASSWORD: ${{ secrets.VENITH_SIGNING_PASSWORD }}
+        run: python3 scripts/package_ci.py
       - name: Collect candidate evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -41,5 +47,6 @@ jobs:
             app/build/outputs/androidTest-results/
             build-verification.log
             smoke-evidence/
+            release-packages/
           if-no-files-found: error
           retention-days: 14
