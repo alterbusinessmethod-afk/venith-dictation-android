@@ -67,6 +67,20 @@ public class DeviceSmokeTest {
         assertEquals("",SecureKeys.read(context,"anthropic_api_key"));
     }
 
+    @Test public void recordLoadedNativeRuntimeVersion() throws Exception {
+        // The stable OrtApiBase C ABI has GetApi then GetVersionString pointers.
+        com.sun.jna.NativeLibrary library=com.sun.jna.NativeLibrary.getInstance("onnxruntime");
+        com.sun.jna.Pointer base=library.getFunction("OrtGetApiBase").invokePointer(new Object[]{});
+        assertNotNull(base);
+        com.sun.jna.Pointer versionPointer=base.getPointer(com.sun.jna.Native.POINTER_SIZE);
+        assertNotNull(versionPointer);
+        String version=(String)com.sun.jna.Function.getFunction(versionPointer).invoke(String.class,new Object[]{});
+        assertTrue("ORT must report its own version",version.matches("[0-9]+\\.[0-9]+\\.[0-9]+.*"));
+        try (FileOutputStream out=new FileOutputStream(evidence("native-runtime-version.txt"))) {
+            out.write(("ONNX Runtime "+version+"\nReported by OrtApiBase.GetVersionString in the Android process.\nA version is not a complete binary-to-source SBOM.\n").getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
     private void capture(Class<? extends Activity> screen, String name) throws Exception {
         Activity activity = (Activity) instrumentation.startActivitySync(new Intent(context, screen).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         instrumentation.waitForIdleSync();
