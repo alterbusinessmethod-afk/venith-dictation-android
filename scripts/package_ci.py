@@ -274,7 +274,11 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
-        # No traceback, environment dump, password, or signing-tool stderr.
-        print("SIGNED_RELEASE_PACKAGE_FAILED: inspect candidate gates and signing secret provisioning", file=sys.stderr)
+    except PackageFailure as exc:
+        # Only fixed labels authored in this script; never raw tool output or credentials.
+        print("SIGNED_RELEASE_PACKAGE_FAILED: " + str(exc), file=sys.stderr)
+        sys.exit(1)
+    except Exception as exc:
+        # Exception type identifies an unexpected phase failure without revealing values.
+        print("SIGNED_RELEASE_PACKAGE_FAILED: unexpected " + type(exc).__name__, file=sys.stderr)
         sys.exit(1)
